@@ -1,9 +1,11 @@
 # olleh
 
-A Swift package that provides an Ollama-compatible API to Apple's new 
+![Screen recording of olleh command running interactively](/demo.gif)
+
+Olleh provides an Ollama-compatible API to Apple's new 
 [Foundation Models](https://developer.apple.com/documentation/foundationmodels), 
 announced at WWDC 2025. 
-Olleh serves as a bridge between Apple's native AI capabilities and the 
+It serves as a bridge between Apple's native AI capabilities and the 
 Ollama ecosystem, offering both a command-line interface and an HTTP API 
 for seamless integration with existing tools and workflows.
 
