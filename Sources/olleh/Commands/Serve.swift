@@ -44,20 +44,41 @@ private final actor OllamaServer: Sendable {
     let host: String
     let port: Int
 
-    // Shared encoders with proper date formatting
+    private let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     private let jsonEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let string = formatter.string(from: date)
+            var container = encoder.singleValueContainer()
+            try container.encode(string)
+        }
         return encoder
     }()
 
     private let jsonDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            guard let date = formatter.date(from: string) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Invalid date format: \(string)"
+                )
+            }
+            return date
+        }
         return decoder
     }()
-
-    private let iso8601Formatter = ISO8601DateFormatter()
 
     init(host: String, port: Int) {
         self.host = host
