@@ -189,6 +189,7 @@ private final actor OllamaServer: Sendable {
                     let finalData = try JSONEncoder().encode(finalResponse)
                     let finalLine = String(data: finalData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: finalLine))
+                    try await writer.finish(nil)
                 } catch {
                     // Send error response
                     let errorResponse = Client.GenerateResponse(
@@ -209,6 +210,7 @@ private final actor OllamaServer: Sendable {
                     let errorData = try JSONEncoder().encode(errorResponse)
                     let errorLine = String(data: errorData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: errorLine))
+                    try await writer.finish(nil)
                 }
             }
 
@@ -322,6 +324,7 @@ private final actor OllamaServer: Sendable {
                     let finalData = try JSONEncoder().encode(finalResponse)
                     let finalLine = String(data: finalData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: finalLine))
+                    try await writer.finish(nil)
                 } catch {
                     // Send error response
                     let errorResponse = Client.ChatResponse(
@@ -340,6 +343,7 @@ private final actor OllamaServer: Sendable {
                     let errorData = try JSONEncoder().encode(errorResponse)
                     let errorLine = String(data: errorData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: errorLine))
+                    try await writer.finish(nil)
                 }
             }
 
