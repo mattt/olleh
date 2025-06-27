@@ -41,6 +41,8 @@ extension FoundationModelsDependency: DependencyKey {
         actor Client {
             private var session: LanguageModelSession?
 
+            private let isAvailable: Bool = ProcessInfo.processInfo.processorArchitecture == "arm64"
+
             private func getSession() async throws -> LanguageModelSession {
                 if let session = self.session {
                     return session
@@ -51,10 +53,10 @@ extension FoundationModelsDependency: DependencyKey {
                 return session
             }
 
-            func isFoundationModelsAvailable() -> Bool {
-                // Foundation Models requires both macOS 26.0+ AND Apple Silicon
-                // Support is all-or-nothing (we're already in macOS 26.0+ context)
-                return ProcessInfo.processInfo.processorArchitecture == "arm64"
+            private func checkAvailability() throws {
+                guard isAvailable else {
+                    throw FoundationModelsDependency.Error.notAvailable
+                }
             }
 
             func prewarm() async {
@@ -70,17 +72,11 @@ extension FoundationModelsDependency: DependencyKey {
                 async throws
                 -> String
             {
-                guard isFoundationModelsAvailable() else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-
+                try checkAvailability()
                 let session = try await getSession()
 
-                // Apply parameters if available
-                if parameters["temperature"] != nil {
-                    // Note: LanguageModelSession parameter setting would go here
-                    // This is a placeholder for when the API supports parameter configuration
-                }
+                // Note: LanguageModelSession doesn't currently support parameter configuration
+                // Parameters are ignored for now but kept for future API compatibility
 
                 let response = try await session.respond(to: prompt)
                 return response.content
@@ -89,10 +85,7 @@ extension FoundationModelsDependency: DependencyKey {
             func streamGenerate(model: String, prompt: String) async throws -> AsyncThrowingStream<
                 String, Swift.Error
             > {
-                guard isFoundationModelsAvailable() else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-
+                try checkAvailability()
                 let session = try await getSession()
 
                 return AsyncThrowingStream { continuation in
@@ -118,10 +111,7 @@ extension FoundationModelsDependency: DependencyKey {
             }
 
             func chat(model: String, messages: [Chat.Message]) async throws -> String {
-                guard isFoundationModelsAvailable() else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-
+                try checkAvailability()
                 let session = try await getSession()
                 let prompt = prompt(for: messages)
                 let response = try await session.respond(to: prompt)
