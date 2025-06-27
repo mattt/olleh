@@ -278,16 +278,13 @@ private final actor OllamaServer: Sendable {
             from: bodyData
         )
 
-        // Convert messages to prompt for streaming
-        let prompt = convertMessagesToPrompt(messages)
-
         if stream {
             // Return streaming response
             let responseBody = ResponseBody { writer in
                 do {
                     let startTime = Date()
-                    let streamedContent = try await self.foundationModelsClient.streamGenerate(
-                        model, prompt, generationParams)
+                    let streamedContent = try await self.foundationModelsClient.streamChat(
+                        model, messages, generationParams)
 
                     for try await chunk in streamedContent {
                         let response = Client.ChatResponse(
@@ -355,7 +352,8 @@ private final actor OllamaServer: Sendable {
             // Non-streaming response
             let response = try await foundationModelsClient.chat(
                 model,
-                messages
+                messages,
+                generationParams
             )
 
             let data = try JSONEncoder().encode(
@@ -399,18 +397,4 @@ private final actor OllamaServer: Sendable {
         )
     }
 
-    private func convertMessagesToPrompt(_ messages: [Chat.Message]) -> String {
-        return messages.map { message in
-            switch message.role {
-            case .system:
-                return "System: \(message.content)"
-            case .user:
-                return "User: \(message.content)"
-            case .assistant:
-                return "Assistant: \(message.content)"
-            case .tool:
-                return "Tool: \(message.content)"
-            }
-        }.joined(separator: "\n\n")
-    }
 }

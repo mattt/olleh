@@ -57,7 +57,12 @@ struct FoundationModelsDependency: Sendable {
             AsyncThrowingStream<
                 String, Swift.Error
             >
-    var chat: @Sendable (_ model: String, _ messages: [Chat.Message]) async throws -> String
+    var chat:
+        @Sendable (_ model: String, _ messages: [Chat.Message], _ parameters: Parameters)
+            async throws -> String
+    var streamChat:
+        @Sendable (_ model: String, _ messages: [Chat.Message], _ parameters: Parameters)
+            async throws -> AsyncThrowingStream<String, Swift.Error>
 }
 
 // MARK: -
@@ -139,12 +144,24 @@ extension FoundationModelsDependency: DependencyKey {
                 }
             }
 
-            func chat(model: String, messages: [Chat.Message]) async throws -> String {
+            func chat(
+                model: String, messages: [Chat.Message], parameters: Parameters = Parameters()
+            ) async throws -> String {
                 try checkAvailability()
                 let session = try await getSession()
                 let prompt = prompt(for: messages)
-                let response = try await session.respond(to: prompt)
+                let response = try await session.respond(
+                    to: prompt, options: parameters.generationOptions)
                 return response.content
+            }
+
+            func streamChat(
+                model: String, messages: [Chat.Message], parameters: Parameters = Parameters()
+            ) async throws -> AsyncThrowingStream<String, Swift.Error> {
+                try checkAvailability()
+                let prompt = prompt(for: messages)
+                return try await streamGenerate(
+                    model: model, prompt: prompt, parameters: parameters)
             }
 
             private func prompt(for messages: [Chat.Message]) -> String {
@@ -206,10 +223,18 @@ extension FoundationModelsDependency: DependencyKey {
                     parameters: parameters
                 )
             },
-            chat: { model, messages in
+            chat: { model, messages, parameters in
                 try await client.chat(
                     model: model,
-                    messages: messages
+                    messages: messages,
+                    parameters: parameters
+                )
+            },
+            streamChat: { model, messages, parameters in
+                try await client.streamChat(
+                    model: model,
+                    messages: messages,
+                    parameters: parameters
                 )
             }
         )
@@ -236,8 +261,15 @@ extension FoundationModelsDependency: DependencyKey {
                 continuation.finish()
             }
         },
-        chat: { _, messages in
+        chat: { _, messages, _ in
             "Test chat response for \(messages.count) messages"
+        },
+        streamChat: { _, messages, _ in
+            AsyncThrowingStream { continuation in
+                continuation.yield("Test streaming chat response")
+                continuation.yield(" for \(messages.count) messages")
+                continuation.finish()
+            }
         }
     )
 }
