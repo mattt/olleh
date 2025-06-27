@@ -44,6 +44,42 @@ private final actor OllamaServer: Sendable {
     let host: String
     let port: Int
 
+    private let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private let jsonEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let string = formatter.string(from: date)
+            var container = encoder.singleValueContainer()
+            try container.encode(string)
+        }
+        return encoder
+    }()
+
+    private let jsonDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            guard let date = formatter.date(from: string) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Invalid date format: \(string)"
+                )
+            }
+            return date
+        }
+        return decoder
+    }()
+
     init(host: String, port: Int) {
         self.host = host
         self.port = port
@@ -65,7 +101,7 @@ private final actor OllamaServer: Sendable {
 
         router.get("/api/tags") { request, context in
             let response = try await self.listModels()
-            let data = try JSONEncoder().encode(response)
+            let data = try self.jsonEncoder.encode(response)
             return Response(
                 status: .ok,
                 headers: [.contentType: "application/json"],
@@ -75,7 +111,7 @@ private final actor OllamaServer: Sendable {
 
         router.get("/api/show") { request, context in
             let response = try await self.showModel(request: request)
-            let data = try JSONEncoder().encode(response)
+            let data = try self.jsonEncoder.encode(response)
             return Response(
                 status: .ok,
                 headers: [.contentType: "application/json"],
@@ -101,7 +137,7 @@ private final actor OllamaServer: Sendable {
             models: models.map {
                 Client.ListModelsResponse.Model(
                     name: $0,
-                    modifiedAt: ISO8601DateFormatter().string(from: Date()),
+                    modifiedAt: iso8601Formatter.string(from: Date()),
                     size: 0,
                     digest: "",
                     details: Model.Details(
@@ -123,7 +159,7 @@ private final actor OllamaServer: Sendable {
             bodyData.append(contentsOf: chunk.readableBytesView)
         }
 
-        let params = try JSONDecoder().decode([String: Value].self, from: bodyData)
+        let params = try jsonDecoder.decode([String: Value].self, from: bodyData)
 
         guard foundationModelsClient.isAvailable() else {
             throw FoundationModelsDependency.Error.notAvailable
@@ -135,7 +171,7 @@ private final actor OllamaServer: Sendable {
         let stream = params["stream"]?.boolValue ?? false
 
         // Extract generation parameters directly
-        let generationParams = try JSONDecoder().decode(
+        let generationParams = try jsonDecoder.decode(
             FoundationModelsDependency.Parameters.self,
             from: bodyData
         )
@@ -165,7 +201,7 @@ private final actor OllamaServer: Sendable {
                             evalDuration: nil
                         )
 
-                        let data = try JSONEncoder().encode(response)
+                        let data = try self.jsonEncoder.encode(response)
                         let line = String(data: data, encoding: .utf8)! + "\n"
                         try await writer.write(ByteBuffer(string: line))
                     }
@@ -186,7 +222,7 @@ private final actor OllamaServer: Sendable {
                         evalDuration: nil
                     )
 
-                    let finalData = try JSONEncoder().encode(finalResponse)
+                    let finalData = try self.jsonEncoder.encode(finalResponse)
                     let finalLine = String(data: finalData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: finalLine))
                     try await writer.finish(nil)
@@ -207,7 +243,7 @@ private final actor OllamaServer: Sendable {
                         evalDuration: nil
                     )
 
-                    let errorData = try JSONEncoder().encode(errorResponse)
+                    let errorData = try self.jsonEncoder.encode(errorResponse)
                     let errorLine = String(data: errorData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: errorLine))
                     try await writer.finish(nil)
@@ -227,7 +263,7 @@ private final actor OllamaServer: Sendable {
                 generationParams
             )
 
-            let data = try JSONEncoder().encode(
+            let data = try jsonEncoder.encode(
                 Client.GenerateResponse(
                     model: Model.ID(rawValue: model) ?? "default",
                     createdAt: Date(),
@@ -257,7 +293,7 @@ private final actor OllamaServer: Sendable {
             bodyData.append(contentsOf: chunk.readableBytesView)
         }
 
-        let params = try JSONDecoder().decode([String: Value].self, from: bodyData)
+        let params = try jsonDecoder.decode([String: Value].self, from: bodyData)
 
         guard foundationModelsClient.isAvailable() else {
             throw FoundationModelsDependency.Error.notAvailable
@@ -268,14 +304,14 @@ private final actor OllamaServer: Sendable {
         let stream = params["stream"]?.boolValue ?? false
         let messages: [Chat.Message]
         if let messagesValue = params["messages"] {
-            let data = try JSONEncoder().encode(messagesValue)
-            messages = try JSONDecoder().decode([Chat.Message].self, from: data)
+            let data = try jsonEncoder.encode(messagesValue)
+            messages = try jsonDecoder.decode([Chat.Message].self, from: data)
         } else {
             messages = []
         }
 
         // Extract generation parameters directly
-        let generationParams = try JSONDecoder().decode(
+        let generationParams = try jsonDecoder.decode(
             FoundationModelsDependency.Parameters.self,
             from: bodyData
         )
@@ -302,7 +338,7 @@ private final actor OllamaServer: Sendable {
                             evalDuration: nil
                         )
 
-                        let data = try JSONEncoder().encode(response)
+                        let data = try self.jsonEncoder.encode(response)
                         let line = String(data: data, encoding: .utf8)! + "\n"
                         try await writer.write(ByteBuffer(string: line))
                     }
@@ -321,7 +357,7 @@ private final actor OllamaServer: Sendable {
                         evalDuration: nil
                     )
 
-                    let finalData = try JSONEncoder().encode(finalResponse)
+                    let finalData = try self.jsonEncoder.encode(finalResponse)
                     let finalLine = String(data: finalData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: finalLine))
                     try await writer.finish(nil)
@@ -340,7 +376,7 @@ private final actor OllamaServer: Sendable {
                         evalDuration: nil
                     )
 
-                    let errorData = try JSONEncoder().encode(errorResponse)
+                    let errorData = try self.jsonEncoder.encode(errorResponse)
                     let errorLine = String(data: errorData, encoding: .utf8)! + "\n"
                     try await writer.write(ByteBuffer(string: errorLine))
                     try await writer.finish(nil)
@@ -360,7 +396,7 @@ private final actor OllamaServer: Sendable {
                 generationParams
             )
 
-            let data = try JSONEncoder().encode(
+            let data = try jsonEncoder.encode(
                 Client.ChatResponse(
                     model: Model.ID(rawValue: model) ?? "default",
                     createdAt: Date(),
