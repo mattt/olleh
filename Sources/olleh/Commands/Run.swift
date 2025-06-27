@@ -239,6 +239,8 @@ private final actor ChatSession {
         var verbose: Bool = false
     }
 
+    private let historyFile = "\(NSHomeDirectory())/.olleh_history"
+
     var settings: Settings
 
     var parameters: FoundationModelsDependency.Parameters
@@ -313,15 +315,6 @@ private final actor ChatSession {
             // Handle empty input
             if input.isEmpty {
                 continue
-            }
-
-            // Handle exit commands
-            if input.lowercased() == "exit" || input == "/bye" {
-                if settings.history {
-                    Bestline.saveHistory(to: historyFile)
-                }
-                print("Bye! Have a great day!")
-                break
             }
 
             // Handle commands
@@ -412,8 +405,7 @@ private final actor ChatSession {
         case .clear:
             handleClearCommand()
         case .bye:
-            // Handled in main loop
-            break
+            handleByeCommand()
         }
         print()
     }
@@ -550,6 +542,14 @@ private final actor ChatSession {
         parameters = .init()
         settings.system = ""
         print("Session context and history cleared")
+    }
+
+    private func handleByeCommand() {
+        print("Bye! Have a great day!")
+        if settings.history {
+            Bestline.saveHistory(to: historyFile)
+        }
+        exit(0)
     }
 
     private func parseCommand(_ input: String) -> (command: Command?, args: [String]) {
