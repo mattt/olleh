@@ -52,6 +52,7 @@ private final actor OllamaServer: Sendable {
 
     private let jsonEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         encoder.dateEncodingStrategy = .custom { date, encoder in
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -86,6 +87,11 @@ private final actor OllamaServer: Sendable {
     }
 
     @Dependency(\.foundationModelsClient) var foundationModelsClient
+
+    private nonisolated func approximateTokenCount(for text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+        return max(1, text.count / 4)
+    }
 
     func start() async throws {
         let router = Router()
@@ -154,6 +160,8 @@ private final actor OllamaServer: Sendable {
     }
 
     private func generateCompletion(request: Request) async throws -> Response {
+        let startTime = Date.now
+
         var bodyData = Data()
         for try await chunk in request.body.buffer(policy: .unbounded) {
             bodyData.append(contentsOf: chunk.readableBytesView)
@@ -176,16 +184,24 @@ private final actor OllamaServer: Sendable {
             from: bodyData
         )
 
+        // Calculate prompt token count approximation
+        let promptTokenCount = approximateTokenCount(for: prompt)
+
         // Check if streaming is requested
         if stream {
             // Return streaming response
             let responseBody = ResponseBody { writer in
                 do {
-                    let startTime = Date()
+                    let loadStartTime = Date()
                     let streamedContent = try await self.foundationModelsClient.streamGenerate(
                         model, prompt, generationParams)
+                    let loadDuration = Date().timeIntervalSince(loadStartTime)
+
+                    var completionText = ""
+                    let promptEvalStartTime = Date()
 
                     for try await chunk in streamedContent {
+                        completionText += chunk
                         let response = Client.GenerateResponse(
                             model: Model.ID(rawValue: model) ?? "default",
                             createdAt: Date(),
@@ -206,6 +222,9 @@ private final actor OllamaServer: Sendable {
                         try await writer.write(ByteBuffer(string: line))
                     }
 
+                    let totalDuration = Date().timeIntervalSince(startTime)
+                    let evalTokenCount = self.approximateTokenCount(for: completionText)
+
                     // Send final "done" response
                     let finalResponse = Client.GenerateResponse(
                         model: Model.ID(rawValue: model) ?? "default",
@@ -214,12 +233,12 @@ private final actor OllamaServer: Sendable {
                         done: true,
                         context: nil,
                         thinking: nil,
-                        totalDuration: Date().timeIntervalSince(startTime),
-                        loadDuration: nil,
-                        promptEvalCount: nil,
-                        promptEvalDuration: nil,
-                        evalCount: nil,
-                        evalDuration: nil
+                        totalDuration: totalDuration,
+                        loadDuration: loadDuration,
+                        promptEvalCount: promptTokenCount,
+                        promptEvalDuration: Date().timeIntervalSince(promptEvalStartTime),
+                        evalCount: evalTokenCount,
+                        evalDuration: totalDuration - loadDuration
                     )
 
                     let finalData = try self.jsonEncoder.encode(finalResponse)
@@ -257,11 +276,16 @@ private final actor OllamaServer: Sendable {
             )
         } else {
             // Non-streaming response
+            let loadStartTime = Date()
             let response = try await foundationModelsClient.generate(
                 model,
                 prompt,
                 generationParams
             )
+            let loadDuration = Date().timeIntervalSince(loadStartTime)
+            let totalDuration = Date().timeIntervalSince(startTime)
+
+            let evalTokenCount = approximateTokenCount(for: response)
 
             let data = try jsonEncoder.encode(
                 Client.GenerateResponse(
@@ -271,12 +295,12 @@ private final actor OllamaServer: Sendable {
                     done: true,
                     context: nil,
                     thinking: nil,
-                    totalDuration: nil,
-                    loadDuration: nil,
-                    promptEvalCount: nil,
-                    promptEvalDuration: nil,
-                    evalCount: nil,
-                    evalDuration: nil
+                    totalDuration: totalDuration,
+                    loadDuration: loadDuration,
+                    promptEvalCount: promptTokenCount,
+                    promptEvalDuration: loadDuration,
+                    evalCount: evalTokenCount,
+                    evalDuration: totalDuration - loadDuration
                 ))
 
             return Response(
@@ -288,6 +312,8 @@ private final actor OllamaServer: Sendable {
     }
 
     private func chatCompletion(request: Request) async throws -> Response {
+        let startTime = Date()
+
         var bodyData = Data()
         for try await chunk in request.body.buffer(policy: .unbounded) {
             bodyData.append(contentsOf: chunk.readableBytesView)
@@ -316,26 +342,35 @@ private final actor OllamaServer: Sendable {
             from: bodyData
         )
 
+        // Calculate prompt token count approximation
+        let promptText = messages.map(\.content).joined(separator: "\n")
+        let promptTokenCount = approximateTokenCount(for: promptText)
+
         if stream {
             // Return streaming response
             let responseBody = ResponseBody { writer in
                 do {
-                    let startTime = Date()
+                    let loadStartTime = Date()
                     let streamedContent = try await self.foundationModelsClient.streamChat(
                         model, messages, generationParams)
+                    let loadDuration = Date().timeIntervalSince(loadStartTime)
+
+                    var completionText = ""
+                    let promptEvalStartTime = Date()
 
                     for try await chunk in streamedContent {
+                        completionText += chunk
                         let response = Client.ChatResponse(
                             model: Model.ID(rawValue: model) ?? "default",
                             createdAt: Date(),
                             message: Chat.Message.assistant(chunk),
                             done: false,
                             totalDuration: nil,
-                            loadDuration: nil,
-                            promptEvalCount: nil,
-                            promptEvalDuration: nil,
-                            evalCount: nil,
-                            evalDuration: nil
+                            loadDuration: loadDuration,
+                            promptEvalCount: promptTokenCount,
+                            promptEvalDuration: Date().timeIntervalSince(promptEvalStartTime),
+                            evalCount: self.approximateTokenCount(for: completionText),
+                            evalDuration: Date().timeIntervalSince(startTime) - loadDuration
                         )
 
                         let data = try self.jsonEncoder.encode(response)
@@ -343,18 +378,21 @@ private final actor OllamaServer: Sendable {
                         try await writer.write(ByteBuffer(string: line))
                     }
 
+                    let totalDuration = Date().timeIntervalSince(startTime)
+                    let evalTokenCount = self.approximateTokenCount(for: completionText)
+
                     // Send final "done" response
                     let finalResponse = Client.ChatResponse(
                         model: Model.ID(rawValue: model) ?? "default",
                         createdAt: Date(),
                         message: Chat.Message.assistant(""),
                         done: true,
-                        totalDuration: Date().timeIntervalSince(startTime),
-                        loadDuration: nil,
-                        promptEvalCount: nil,
-                        promptEvalDuration: nil,
-                        evalCount: nil,
-                        evalDuration: nil
+                        totalDuration: totalDuration,
+                        loadDuration: loadDuration,
+                        promptEvalCount: promptTokenCount,
+                        promptEvalDuration: Date().timeIntervalSince(promptEvalStartTime),
+                        evalCount: evalTokenCount,
+                        evalDuration: totalDuration - loadDuration
                     )
 
                     let finalData = try self.jsonEncoder.encode(finalResponse)
@@ -390,11 +428,16 @@ private final actor OllamaServer: Sendable {
             )
         } else {
             // Non-streaming response
+            let loadStartTime = Date()
             let response = try await foundationModelsClient.chat(
                 model,
                 messages,
                 generationParams
             )
+            let loadDuration = Date().timeIntervalSince(loadStartTime)
+            let totalDuration = Date().timeIntervalSince(startTime)
+
+            let evalTokenCount = approximateTokenCount(for: response)
 
             let data = try jsonEncoder.encode(
                 Client.ChatResponse(
@@ -402,12 +445,12 @@ private final actor OllamaServer: Sendable {
                     createdAt: Date(),
                     message: Chat.Message.assistant(response),
                     done: true,
-                    totalDuration: nil,
-                    loadDuration: nil,
-                    promptEvalCount: nil,
-                    promptEvalDuration: nil,
-                    evalCount: nil,
-                    evalDuration: nil
+                    totalDuration: totalDuration,
+                    loadDuration: loadDuration,
+                    promptEvalCount: promptTokenCount,
+                    promptEvalDuration: loadDuration,
+                    evalCount: evalTokenCount,
+                    evalDuration: totalDuration - loadDuration
                 ))
 
             return Response(
