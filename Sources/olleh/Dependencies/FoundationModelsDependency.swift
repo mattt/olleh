@@ -119,18 +119,27 @@ extension FoundationModelsDependency: DependencyKey {
             }
 
             private func prompt(for messages: [Chat.Message]) -> String {
-                return messages.map { message in
+                var result = ""
+                result.reserveCapacity(messages.count * 128)
+
+                for (index, message) in messages.enumerated() {
+                    if index > 0 {
+                        result += "\n\n"
+                    }
+
                     switch message.role {
                     case .system:
-                        return "System: \(message.content)"
+                        result += "System: \(message.content)"
                     case .user:
-                        return "User: \(message.content)"
+                        result += "User: \(message.content)"
                     case .assistant:
-                        return "Assistant: \(message.content)"
+                        result += "Assistant: \(message.content)"
                     case .tool:
-                        return "Tool: \(message.content)"
+                        result += "Tool: \(message.content)"
                     }
-                }.joined(separator: "\n\n")
+                }
+
+                return result
             }
         }
 
