@@ -148,7 +148,6 @@ extension FoundationModelsDependency: DependencyKey {
         return FoundationModelsDependency(
             isAvailable: {
                 // Foundation Models requires both macOS 26.0+ AND Apple Silicon
-                // Support is all-or-nothing
                 if #available(macOS 26.0, *) {
                     return ProcessInfo.processInfo.processorArchitecture == "arm64"
                 } else {
