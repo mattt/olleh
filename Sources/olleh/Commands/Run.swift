@@ -239,6 +239,8 @@ private final actor ChatSession {
         var verbose: Bool = false
     }
 
+    private let historyFile = "\(NSHomeDirectory())/.olleh_history"
+
     var settings: Settings
 
     var parameters: FoundationModelsDependency.Parameters
@@ -252,43 +254,42 @@ private final actor ChatSession {
     }
 
     func start(with model: String) async throws {
-        print("Starting interactive chat with model: \(model)")
-
         if foundationModelsClient.isAvailable() {
             _ = await withLoadingAnimation {
                 await self.foundationModelsClient.prewarm()
             }
         }
 
-        print("Type '/bye' or 'exit' to quit")
-        print("Use '/help' for help")
-        print()
-
-        // Set up Bestline for better readline experience
-        let historyFile = "\(NSHomeDirectory())/.olleh_history"
         if settings.history {
             Bestline.loadHistory(from: historyFile)
         }
 
-        Bestline.setCompletionCallback { line, _ in
-            if line.hasPrefix("/") {
+        Bestline.setHintsCallback { input in
+            if input.isEmpty {
+                return "Enter a message (/? for help)"
+            }
+            return ""
+        }
+
+        Bestline.setCompletionCallback { input, _ in
+            if input.hasPrefix("/") {
                 let commands = Command.allCases.map { "/\($0.rawValue)" }
-                return commands.filter { $0.hasPrefix(line) }
-            } else if line.hasPrefix("/set ") {
+                return commands.filter { $0.hasPrefix(input) }
+            } else if input.hasPrefix("/set ") {
                 let settingNames = [
                     "parameter", "system", "history", "wordwrap", "format", "verbose",
                 ]
                 let setPrefix = "/set "
                 return settingNames.compactMap { name in
                     let fullCommand = setPrefix + name
-                    return fullCommand.hasPrefix(line) ? fullCommand : nil
+                    return fullCommand.hasPrefix(input) ? fullCommand : nil
                 }
-            } else if line.hasPrefix("/set parameter ") {
+            } else if input.hasPrefix("/set parameter ") {
                 let paramNames = ["seed", "temperature", "top-p", "max-tokens", "stop"]
                 let paramPrefix = "/set parameter "
                 return paramNames.compactMap { param in
                     let fullCommand = paramPrefix + param
-                    return fullCommand.hasPrefix(line) ? fullCommand : nil
+                    return fullCommand.hasPrefix(input) ? fullCommand : nil
                 }
             }
             return []
@@ -312,15 +313,6 @@ private final actor ChatSession {
             // Handle empty input
             if input.isEmpty {
                 continue
-            }
-
-            // Handle exit commands
-            if input.lowercased() == "exit" || input == "/bye" {
-                if settings.history {
-                    Bestline.saveHistory(to: historyFile)
-                }
-                print("Bye! Have a great day!")
-                break
             }
 
             // Handle commands
@@ -411,8 +403,7 @@ private final actor ChatSession {
         case .clear:
             handleClearCommand()
         case .bye:
-            // Handled in main loop
-            break
+            handleByeCommand()
         }
         print()
     }
@@ -549,6 +540,14 @@ private final actor ChatSession {
         parameters = .init()
         settings.system = ""
         print("Session context and history cleared")
+    }
+
+    private func handleByeCommand() {
+        print("Bye! Have a great day!")
+        if settings.history {
+            Bestline.saveHistory(to: historyFile)
+        }
+        exit(0)
     }
 
     private func parseCommand(_ input: String) -> (command: Command?, args: [String]) {

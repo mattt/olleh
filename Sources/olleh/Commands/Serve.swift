@@ -132,7 +132,6 @@ private final actor OllamaServer: Sendable {
             )
         )
 
-        print("Starting Olleh server on \(host):\(port)")
         try await app.runService()
     }
 
