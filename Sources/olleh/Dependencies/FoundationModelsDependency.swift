@@ -41,6 +41,8 @@ extension FoundationModelsDependency: DependencyKey {
         actor Client {
             private var session: LanguageModelSession?
 
+            private let isAvailable: Bool = ProcessInfo.processInfo.processorArchitecture == "arm64"
+
             private func getSession() async throws -> LanguageModelSession {
                 if let session = self.session {
                     return session
@@ -51,10 +53,10 @@ extension FoundationModelsDependency: DependencyKey {
                 return session
             }
 
-            func isFoundationModelsAvailable() -> Bool {
-                // Foundation Models requires both macOS 26.0+ AND Apple Silicon
-                // Support is all-or-nothing (we're already in macOS 26.0+ context)
-                return ProcessInfo.processInfo.processorArchitecture == "arm64"
+            private func checkAvailability() throws {
+                guard isAvailable else {
+                    throw FoundationModelsDependency.Error.notAvailable
+                }
             }
 
             func prewarm() async {
@@ -70,17 +72,11 @@ extension FoundationModelsDependency: DependencyKey {
                 async throws
                 -> String
             {
-                guard isFoundationModelsAvailable() else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-
+                try checkAvailability()
                 let session = try await getSession()
 
-                // Apply parameters if available
-                if parameters["temperature"] != nil {
-                    // Note: LanguageModelSession parameter setting would go here
-                    // This is a placeholder for when the API supports parameter configuration
-                }
+                // Note: LanguageModelSession doesn't currently support parameter configuration
+                // Parameters are ignored for now but kept for future API compatibility
 
                 let response = try await session.respond(to: prompt)
                 return response.content
@@ -89,25 +85,21 @@ extension FoundationModelsDependency: DependencyKey {
             func streamGenerate(model: String, prompt: String) async throws -> AsyncThrowingStream<
                 String, Swift.Error
             > {
-                guard isFoundationModelsAvailable() else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-
+                try checkAvailability()
                 let session = try await getSession()
 
                 return AsyncThrowingStream { continuation in
                     Task {
                         do {
-                            let stream = session.streamResponse(to: prompt)
-                            var previousContent = ""
-                            
-                            for try await snapshot in stream {
+                            var lastSnapshotCount = 0
+                            for try await snapshot in session.streamResponse(to: prompt) {
                                 // Foundation Models emits cumulative snapshots, not deltas
                                 // Extract only the new content since the last emission
-                                if snapshot.count > previousContent.count {
-                                    let newContent = String(snapshot.dropFirst(previousContent.count))
+                                if snapshot.count > lastSnapshotCount {
+                                    let newContent = String(
+                                        snapshot.dropFirst(lastSnapshotCount))
                                     continuation.yield(newContent)
-                                    previousContent = snapshot
+                                    lastSnapshotCount = snapshot.count
                                 }
                             }
                             continuation.finish()
@@ -119,10 +111,7 @@ extension FoundationModelsDependency: DependencyKey {
             }
 
             func chat(model: String, messages: [Chat.Message]) async throws -> String {
-                guard isFoundationModelsAvailable() else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-
+                try checkAvailability()
                 let session = try await getSession()
                 let prompt = prompt(for: messages)
                 let response = try await session.respond(to: prompt)
@@ -130,18 +119,27 @@ extension FoundationModelsDependency: DependencyKey {
             }
 
             private func prompt(for messages: [Chat.Message]) -> String {
-                return messages.map { message in
+                var result = ""
+                result.reserveCapacity(messages.count * 128)
+
+                for (index, message) in messages.enumerated() {
+                    if index > 0 {
+                        result += "\n\n"
+                    }
+
                     switch message.role {
                     case .system:
-                        return "System: \(message.content)"
+                        result += "System: \(message.content)"
                     case .user:
-                        return "User: \(message.content)"
+                        result += "User: \(message.content)"
                     case .assistant:
-                        return "Assistant: \(message.content)"
+                        result += "Assistant: \(message.content)"
                     case .tool:
-                        return "Tool: \(message.content)"
+                        result += "Tool: \(message.content)"
                     }
-                }.joined(separator: "\n\n")
+                }
+
+                return result
             }
         }
 
@@ -150,7 +148,6 @@ extension FoundationModelsDependency: DependencyKey {
         return FoundationModelsDependency(
             isAvailable: {
                 // Foundation Models requires both macOS 26.0+ AND Apple Silicon
-                // Support is all-or-nothing
                 if #available(macOS 26.0, *) {
                     return ProcessInfo.processInfo.processorArchitecture == "arm64"
                 } else {
