@@ -254,8 +254,6 @@ private final actor ChatSession {
     }
 
     func start(with model: String) async throws {
-        print("Starting interactive chat with model: \(model)")
-
         if foundationModelsClient.isAvailable() {
             _ = await withLoadingAnimation {
                 await self.foundationModelsClient.prewarm()
