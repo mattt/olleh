@@ -2,11 +2,11 @@
 
 ![Screen recording of olleh command running interactively](/demo.gif)
 
-Olleh provides an Ollama-compatible API to Apple's new 
-[Foundation Models](https://developer.apple.com/documentation/foundationmodels), 
-announced at WWDC 2025. 
-It serves as a bridge between Apple's native AI capabilities and the 
-Ollama ecosystem, offering both a command-line interface and an HTTP API 
+Olleh provides an Ollama-compatible API to Apple's new
+[Foundation Models](https://developer.apple.com/documentation/foundationmodels),
+announced at WWDC 2025.
+It serves as a bridge between Apple's native AI capabilities and the
+Ollama ecosystem, offering both a command-line interface and an HTTP API
 for seamless integration with existing tools and workflows.
 
 ## Requirements
@@ -20,7 +20,7 @@ for seamless integration with existing tools and workflows.
 ### Building from Source
 
 ```bash
-git clone https://github.com/loopwork-ai/olleh.git
+git clone https://github.com/loopwork/olleh.git
 cd olleh
 swift build -c release
 ```
@@ -100,16 +100,16 @@ Use `Ctrl+C` or type `/bye` to exit the chat session.
 
 #### `olleh check`
 
-Verify that Foundation Models are available on your system. 
+Verify that Foundation Models are available on your system.
 
 #### `olleh list`
 
-List all available models. 
+List all available models.
 Currently returns only the `default` Foundation Model.
 
 ## HTTP API
 
-When running `olleh serve`, 
+When running `olleh serve`,
 the following Ollama-compatible endpoints are available:
 
 - `POST /api/generate` - Generate text completions
@@ -119,8 +119,8 @@ the following Ollama-compatible endpoints are available:
 
 ### Example: Using with Ollama Swift Client
 
-You can use Olleh with the 
-[Ollama Swift](https://github.com/loopwork-ai/ollama-swift) 
+You can use Olleh with the
+[Ollama Swift](https://github.com/loopwork/ollama-swift)
 client library:
 
 ```swift
@@ -161,7 +161,7 @@ curl http://localhost:43110/api/chat -d '{
 
 ## Model Support
 
-Olleh currently supports the lone `default` model 
+Olleh currently supports the lone `default` model
 provided by Apple's Foundation Models framework.
 
 Future releases may include:
