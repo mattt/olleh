@@ -134,6 +134,12 @@ private final actor OllamaServer: Sendable {
         let prompt = params["prompt"]?.stringValue ?? ""
         let stream = params["stream"]?.boolValue ?? false
 
+        // Extract generation parameters directly
+        let generationParams = try JSONDecoder().decode(
+            FoundationModelsDependency.Parameters.self,
+            from: bodyData
+        )
+
         // Check if streaming is requested
         if stream {
             // Return streaming response
@@ -141,7 +147,7 @@ private final actor OllamaServer: Sendable {
                 do {
                     let startTime = Date()
                     let streamedContent = try await self.foundationModelsClient.streamGenerate(
-                        model, prompt)
+                        model, prompt, generationParams)
 
                     for try await chunk in streamedContent {
                         let response = Client.GenerateResponse(
@@ -216,7 +222,7 @@ private final actor OllamaServer: Sendable {
             let response = try await foundationModelsClient.generate(
                 model,
                 prompt,
-                [:]
+                generationParams
             )
 
             let data = try JSONEncoder().encode(
@@ -266,6 +272,12 @@ private final actor OllamaServer: Sendable {
             messages = []
         }
 
+        // Extract generation parameters directly
+        let generationParams = try JSONDecoder().decode(
+            FoundationModelsDependency.Parameters.self,
+            from: bodyData
+        )
+
         // Convert messages to prompt for streaming
         let prompt = convertMessagesToPrompt(messages)
 
@@ -275,7 +287,7 @@ private final actor OllamaServer: Sendable {
                 do {
                     let startTime = Date()
                     let streamedContent = try await self.foundationModelsClient.streamGenerate(
-                        model, prompt)
+                        model, prompt, generationParams)
 
                     for try await chunk in streamedContent {
                         let response = Client.ChatResponse(

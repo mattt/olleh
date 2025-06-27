@@ -3,6 +3,8 @@ import Bestline
 import Dependencies
 import Foundation
 
+import enum Ollama.Value
+
 extension Olleh {
     struct Run: ParsableCommand {
         static let configuration = CommandConfiguration(
@@ -239,39 +241,11 @@ private final actor ChatSession {
 
     var settings: Settings
 
-    struct Parameters {
-        var seed: Int?
-        var temperature: Double?
-        var topP: Double?
-        var maxTokens: Int?
-        var stop: String?
-
-        var dictionaryValue: [String: String] {
-            var dict: [String: String] = [:]
-            if let seed = seed {
-                dict["seed"] = String(seed)
-            }
-            if let temperature = temperature {
-                dict["temperature"] = String(temperature)
-            }
-            if let topP = topP {
-                dict["top_p"] = String(topP)
-            }
-            if let maxTokens = maxTokens {
-                dict["max_tokens"] = String(maxTokens)
-            }
-            if let stop = stop {
-                dict["stop"] = stop
-            }
-            return dict
-        }
-    }
-
-    var parameters: Parameters
+    var parameters: FoundationModelsDependency.Parameters
 
     init(
         settings: Settings = .init(),
-        parameters: Parameters = .init()
+        parameters: FoundationModelsDependency.Parameters = .init()
     ) {
         self.settings = settings
         self.parameters = parameters
@@ -368,28 +342,31 @@ private final actor ChatSession {
                         ? input : "\(settings.system)\n\nUser: \(input)"
 
                     do {
-                        let streamedContent = try await foundationModelsClient.streamGenerate(model, finalPrompt)
-                        
-                        print("", terminator: "") // Start on new line
+                        let streamedContent = try await foundationModelsClient.streamGenerate(
+                            model, finalPrompt, parameters)
+
+                        print("", terminator: "")  // Start on new line
                         var totalResponse = ""
-                        
+
                         for try await chunk in streamedContent {
                             print(chunk, terminator: "")
                             fflush(stdout)
                             totalResponse += chunk
                         }
-                        
-                        print() // End with newline
+
+                        print()  // End with newline
 
                         if settings.verbose {
-                            print("\n[Verbose: Message processed - \(totalResponse.count) characters]")
+                            print(
+                                "\n[Verbose: Message processed - \(totalResponse.count) characters]"
+                            )
                         }
                     } catch {
                         // Fallback to non-streaming if streaming fails
                         let response = try await withLoadingAnimation {
                             try await self.foundationModelsClient.generate(
                                 model, finalPrompt,
-                                self.parameters.dictionaryValue)
+                                self.parameters)
                         }
 
                         print(response)
@@ -569,7 +546,7 @@ private final actor ChatSession {
 
     private func handleClearCommand() {
         Bestline.freeHistory()
-        parameters = Parameters()
+        parameters = .init()
         settings.system = ""
         print("Session context and history cleared")
     }
@@ -645,5 +622,27 @@ private final actor ChatSession {
         print("  Ctrl+E          Move to end of line")
         print("  Ctrl+L          Clear screen")
         print("  \"\"\"           Begin multi-line message")
+    }
+}
+
+extension FoundationModelsDependency.Parameters {
+    fileprivate var dictionaryValue: [String: Ollama.Value] {
+        var dict: [String: Ollama.Value] = [:]
+        if let seed = seed {
+            dict["seed"] = .int(seed)
+        }
+        if let temperature = temperature {
+            dict["temperature"] = .double(temperature)
+        }
+        if let topP = topP {
+            dict["top_p"] = .double(topP)
+        }
+        if let maxTokens = maxTokens {
+            dict["max_tokens"] = .int(maxTokens)
+        }
+        if let stop = stop {
+            dict["stop"] = .string(stop)
+        }
+        return dict
     }
 }
