@@ -8,12 +8,18 @@ Set FontSize 24
 Set Width 1200
 Set Height 800
 
-Type "olleh run"
-Enter
-Sleep 100ms
+Sleep 500ms
 
-Type@50ms "Say 'hello' backwards in ten different languages"
+Type@100ms "olleh run"
+Sleep 1s
+Enter
+
+Sleep 2s
+
+Type@50ms "Say 'hello' in ten different languages"
+
 Enter
 
 # Wait for the response
-Sleep 30s
+Wait+Line@10s  />>>/
+Sleep 10s
