@@ -98,16 +98,15 @@ extension FoundationModelsDependency: DependencyKey {
                 return AsyncThrowingStream { continuation in
                     Task {
                         do {
-                            let stream = session.streamResponse(to: prompt)
-                            var previousContent = ""
-                            
-                            for try await snapshot in stream {
+                            var lastSnapshotCount = 0
+                            for try await snapshot in session.streamResponse(to: prompt) {
                                 // Foundation Models emits cumulative snapshots, not deltas
                                 // Extract only the new content since the last emission
-                                if snapshot.count > previousContent.count {
-                                    let newContent = String(snapshot.dropFirst(previousContent.count))
+                                if snapshot.count > lastSnapshotCount {
+                                    let newContent = String(
+                                        snapshot.dropFirst(lastSnapshotCount))
                                     continuation.yield(newContent)
-                                    previousContent = snapshot
+                                    lastSnapshotCount = snapshot.count
                                 }
                             }
                             continuation.finish()
