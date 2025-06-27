@@ -19,17 +19,44 @@ struct FoundationModelsDependency: Sendable {
         }
     }
 
+    struct Parameters: Codable {
+        var seed: Int?
+        var temperature: Double?
+        var topP: Double?
+        var maxTokens: Int?
+        var stop: String?
+
+        enum CodingKeys: String, CodingKey {
+            case seed
+            case temperature
+            case topP = "top_p"
+            case maxTokens = "max_tokens"
+            case stop
+        }
+
+        @available(macOS 26.0, *)
+        var generationOptions: GenerationOptions {
+            .init(
+                sampling: seed.map { .random(probabilityThreshold: topP ?? 0.9, seed: UInt64($0)) }
+                    ?? topP.map { .random(probabilityThreshold: $0) },
+                temperature: temperature,
+                maximumResponseTokens: maxTokens
+            )
+        }
+    }
+
     var isAvailable: @Sendable () -> Bool
     var prewarm: @Sendable () async -> Void
     var listModels: @Sendable () async -> [String]
     var modelExists: @Sendable (_ name: String) async -> Bool
     var generate:
-        @Sendable (_ model: String, _ prompt: String, _ parameters: [String: String]) async throws
+        @Sendable (_ model: String, _ prompt: String, _ parameters: Parameters) async throws
             -> String
     var streamGenerate:
-        @Sendable (_ model: String, _ prompt: String) async throws -> AsyncThrowingStream<
-            String, Swift.Error
-        >
+        @Sendable (_ model: String, _ prompt: String, _ parameters: Parameters) async throws ->
+            AsyncThrowingStream<
+                String, Swift.Error
+            >
     var chat: @Sendable (_ model: String, _ messages: [Chat.Message]) async throws -> String
 }
 
@@ -68,21 +95,21 @@ extension FoundationModelsDependency: DependencyKey {
                 }
             }
 
-            func generate(model: String, prompt: String, parameters: [String: Any] = [:])
+            func generate(model: String, prompt: String, parameters: Parameters = Parameters())
                 async throws
                 -> String
             {
                 try checkAvailability()
                 let session = try await getSession()
 
-                // Note: LanguageModelSession doesn't currently support parameter configuration
-                // Parameters are ignored for now but kept for future API compatibility
-
-                let response = try await session.respond(to: prompt)
+                let response = try await session.respond(
+                    to: prompt, options: parameters.generationOptions)
                 return response.content
             }
 
-            func streamGenerate(model: String, prompt: String) async throws -> AsyncThrowingStream<
+            func streamGenerate(
+                model: String, prompt: String, parameters: Parameters = Parameters()
+            ) async throws -> AsyncThrowingStream<
                 String, Swift.Error
             > {
                 try checkAvailability()
@@ -92,7 +119,9 @@ extension FoundationModelsDependency: DependencyKey {
                     Task {
                         do {
                             var lastSnapshotCount = 0
-                            for try await snapshot in session.streamResponse(to: prompt) {
+                            for try await snapshot in session.streamResponse(
+                                to: prompt, options: parameters.generationOptions)
+                            {
                                 // Foundation Models emits cumulative snapshots, not deltas
                                 // Extract only the new content since the last emission
                                 if snapshot.count > lastSnapshotCount {
@@ -164,18 +193,17 @@ extension FoundationModelsDependency: DependencyKey {
                 return name == "default"
             },
             generate: { model, prompt, parameters in
-                // Convert string parameters to Any for the actor method
-                let anyParams = parameters.mapValues { $0 as Any }
                 return try await client.generate(
                     model: model,
                     prompt: prompt,
-                    parameters: anyParams
+                    parameters: parameters
                 )
             },
-            streamGenerate: { model, prompt in
+            streamGenerate: { model, prompt, parameters in
                 try await client.streamGenerate(
                     model: model,
-                    prompt: prompt
+                    prompt: prompt,
+                    parameters: parameters
                 )
             },
             chat: { model, messages in
@@ -199,7 +227,7 @@ extension FoundationModelsDependency: DependencyKey {
         generate: { _, prompt, _ in
             "Test response for: \(prompt)"
         },
-        streamGenerate: { _, prompt in
+        streamGenerate: { _, prompt, _ in
             AsyncThrowingStream { continuation in
                 continuation.yield("Test")
                 continuation.yield(" streaming")
