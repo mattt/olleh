@@ -83,7 +83,7 @@ olleh serve
 olleh serve --verbose
 
 # Bind to specific host and port
-olleh serve --host 0.0.0.0 --port 8080
+olleh serve --host 0.0.0.0 --port 11434 # default ollama port 
 ```
 
 #### `olleh run`
@@ -91,19 +91,55 @@ olleh serve --host 0.0.0.0 --port 8080
 Start an interactive chat session with the model.
 
 ```bash
-olleh run default
+$ olleh run default
+>>> Enter a message (/? for help)
 ```
 
 Use `Ctrl+C` or type `/bye` to exit the chat session.
-
-#### `olleh check`
-
-Verify that Foundation Models are available on your system.
 
 #### `olleh list`
 
 List all available models.
 Currently returns only the `default` Foundation Model.
+
+```console
+$ olleh list
+NAME                     ID             SIZE     MODIFIED
+default                                 N/A      2 weeks ago
+```
+
+#### `olleh show`
+
+Show information about a model.
+
+```console
+$ olleh show default
+  Model
+    architecture        foundation
+    parameters          3B
+    context length      65536
+    embedding length    2048
+    quantization        2b-qat
+
+  Capabilities
+    completion
+    tools
+
+  Parameters
+    temperature    0.7
+
+  License
+    Apple Terms of Use
+```
+
+#### `olleh check`
+
+Verify that Foundation Models are available on your system.
+
+```console
+$ olleh check
+Foundation Models available
+```
 
 ## HTTP API
 
