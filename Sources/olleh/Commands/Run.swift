@@ -339,8 +339,14 @@ private final actor ChatSession {
 
                         print("", terminator: "")  // Start on new line
                         var totalResponse = ""
+                        var isFirstChunk = true
 
                         for try await chunk in streamedContent {
+                            if isFirstChunk {
+                                // Clear any potential spinner or formatting from connection phase
+                                print("\r\u{001B}[K", terminator: "")
+                                isFirstChunk = false
+                            }
                             print(chunk, terminator: "")
                             fflush(stdout)
                             totalResponse += chunk
