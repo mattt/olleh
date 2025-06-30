@@ -204,25 +204,6 @@ Future releases may include:
 - Integration with [custom adapters](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)
 - Model configuration and fine-tuning options
 
-## Troubleshooting
-
-### Common Issues
-
-**Foundation Models not available**
-- Ensure you're running macOS 26 beta or later
-- Verify you have an Apple Silicon Mac
-- Check that Foundation Models framework is properly installed
-
-**Server fails to start**
-- Check if another process is using the port
-- Try a different port with `--port` flag
-- Ensure you have necessary permissions
-
-**Model responses are slow**
-- Foundation Models require significant computational resources
-- Ensure other resource-intensive applications are closed
-- Consider adjusting generation parameters for faster responses
-
 ## License
 
 This project is licensed under the Apache License, Version 2.0.
