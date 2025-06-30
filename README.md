@@ -1,4 +1,4 @@
-# olleh
+<img src="/olleh.svg" alt="Olleh" width="250" />
 
 ![Screen recording of olleh command running interactively](/demo.gif)
 
