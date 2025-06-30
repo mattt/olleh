@@ -178,10 +178,11 @@ print(response.response)
 ### Example: Using with curl
 
 ```bash
-# Generate text
+# Generate text with streaming
 curl http://localhost:11941/api/generate -d '{
   "model": "default",
-  "prompt": "Why is the sky blue?"
+  "prompt": "Why is the sky blue?",
+  "stream": true
 }'
 
 # Chat completion
@@ -189,7 +190,7 @@ curl http://localhost:11941/api/chat -d '{
   "model": "default",
   "messages": [
     {"role": "user", "content": "Hello, how are you?"}
-  ]
+  ],
 }'
 ```
 
