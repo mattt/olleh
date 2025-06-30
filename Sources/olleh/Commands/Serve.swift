@@ -564,7 +564,7 @@ private final actor OllamaServer: Sendable {
                 parentModel: nil
             ),
             info: ["license": .string("Apple Foundation Models")],
-            capabilities: [.completion]
+            capabilities: [.completion, .tools]
         )
 
         let data = try jsonEncoder.encode(response)
