@@ -63,6 +63,7 @@ SUBCOMMANDS:
   serve                   Start olleh
   run                     Run a model interactively
   list                    List models
+  show                    Show model information
   check                   Check availability
 
   See 'olleh help <subcommand>' for detailed help.
