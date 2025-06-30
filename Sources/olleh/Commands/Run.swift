@@ -311,7 +311,7 @@ private final actor ChatSession {
             }
 
             // Handle empty input
-            if input.isEmpty {
+            if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 continue
             }
 
