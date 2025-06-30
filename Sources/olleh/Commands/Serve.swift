@@ -213,15 +213,7 @@ private final actor OllamaServer: Sendable {
                             model: Model.ID(rawValue: model) ?? "default",
                             createdAt: Date(),
                             response: chunk,
-                            done: false,
-                            context: nil,
-                            thinking: nil,
-                            totalDuration: nil,
-                            loadDuration: nil,
-                            promptEvalCount: nil,
-                            promptEvalDuration: nil,
-                            evalCount: nil,
-                            evalDuration: nil
+                            done: false
                         )
 
                         let data = try self.jsonEncoder.encode(response)
@@ -272,15 +264,7 @@ private final actor OllamaServer: Sendable {
                         model: Model.ID(rawValue: model) ?? "default",
                         createdAt: Date(),
                         response: "Error: \(error.localizedDescription)",
-                        done: true,
-                        context: nil,
-                        thinking: nil,
-                        totalDuration: nil,
-                        loadDuration: nil,
-                        promptEvalCount: nil,
-                        promptEvalDuration: nil,
-                        evalCount: nil,
-                        evalDuration: nil
+                        done: true
                     )
 
                     let errorData = try self.jsonEncoder.encode(errorResponse)
@@ -474,13 +458,7 @@ private final actor OllamaServer: Sendable {
                         model: Model.ID(rawValue: model) ?? "default",
                         createdAt: Date(),
                         message: Chat.Message.assistant("Error: \(error.localizedDescription)"),
-                        done: true,
-                        totalDuration: nil,
-                        loadDuration: nil,
-                        promptEvalCount: nil,
-                        promptEvalDuration: nil,
-                        evalCount: nil,
-                        evalDuration: nil
+                        done: true
                     )
 
                     let errorData = try self.jsonEncoder.encode(errorResponse)
