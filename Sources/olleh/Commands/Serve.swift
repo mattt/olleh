@@ -3,6 +3,7 @@ import Dependencies
 import Foundation
 import Hummingbird
 import HummingbirdCore
+import Logging
 import NIOCore
 import Ollama
 
@@ -18,8 +19,11 @@ extension Olleh {
         @Option(help: "Port to listen on")
         var port: Int = 11941
 
+        @Flag(help: "Enable verbose logging")
+        var verbose: Bool = false
+
         func run() throws {
-            let server = OllamaServer(host: host, port: port)
+            let server = OllamaServer(host: host, port: port, verbose: verbose)
 
             let group = DispatchGroup()
             group.enter()
@@ -28,7 +32,10 @@ extension Olleh {
                 do {
                     try await server.start()
                 } catch {
-                    print("Server error: \(error)")
+                    print("Server failed to start: \(error.localizedDescription)")
+                    if verbose {
+                        print("Error details: \(error)")
+                    }
                 }
                 group.leave()
             }
@@ -43,6 +50,7 @@ extension Olleh {
 private final actor OllamaServer: Sendable {
     let host: String
     let port: Int
+    let verbose: Bool
 
     private let iso8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -81,9 +89,10 @@ private final actor OllamaServer: Sendable {
         return decoder
     }()
 
-    init(host: String, port: Int) {
+    init(host: String, port: Int, verbose: Bool) {
         self.host = host
         self.port = port
+        self.verbose = verbose
     }
 
     @Dependency(\.foundationModelsClient) var foundationModelsClient
@@ -98,67 +107,42 @@ private final actor OllamaServer: Sendable {
 
         // Ollama-compatible API endpoints
         router.post("/api/generate") { request, context in
-            return try await self.generateCompletion(request: request)
+            context.logger.info("POST /api/generate")
+            return try await self.generateCompletion(request: request, context: context)
         }
 
         router.post("/api/chat") { request, context in
-            return try await self.chatCompletion(request: request)
+            context.logger.info("POST /api/chat")
+            return try await self.chatCompletion(request: request, context: context)
         }
 
         router.get("/api/tags") { request, context in
-            let response = try await self.listModels()
-            let data = try self.jsonEncoder.encode(response)
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: data))
-            )
+            context.logger.info("GET /api/tags")
+            return try await self.listModels(context: context)
         }
 
         router.get("/api/show") { request, context in
-            let response = try await self.showModel(request: request)
-            let data = try self.jsonEncoder.encode(response)
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: data))
-            )
+            context.logger.info("GET /api/show")
+            return try await self.showModel(request: request, context: context)
         }
+
+        var logger = Logger(label: "olleh")
+        logger.logLevel = verbose ? .debug : .info
 
         let app = Application(
             router: router,
             configuration: .init(
                 address: .hostname(host, port: port)
-            )
+            ),
+            logger: logger
         )
 
         try await app.runService()
     }
 
-    private func listModels() async throws -> Client.ListModelsResponse {
-        let models = await foundationModelsClient.listModels()
-
-        return Client.ListModelsResponse(
-            models: models.map {
-                Client.ListModelsResponse.Model(
-                    name: $0,
-                    modifiedAt: iso8601Formatter.string(from: Date()),
-                    size: 0,
-                    digest: "",
-                    details: Model.Details(
-                        format: "apple",
-                        family: "foundation",
-                        families: ["foundation"],
-                        parameterSize: "unknown",
-                        quantizationLevel: "unknown",
-                        parentModel: nil
-                    )
-                )
-            }
-        )
-    }
-
-    private func generateCompletion(request: Request) async throws -> Response {
+    private func generateCompletion(request: Request, context: BasicRequestContext) async throws
+        -> Response
+    {
         let startTime = Date.now
 
         var bodyData = Data()
@@ -168,23 +152,47 @@ private final actor OllamaServer: Sendable {
 
         let params = try jsonDecoder.decode([String: Value].self, from: bodyData)
 
-        guard foundationModelsClient.isAvailable() else {
-            throw FoundationModelsDependency.Error.notAvailable
-        }
-
-        // Extract parameters
         let model = params["model"]?.stringValue ?? "default"
         let prompt = params["prompt"]?.stringValue ?? ""
         let stream = params["stream"]?.boolValue ?? false
 
+        guard foundationModelsClient.isAvailable() else {
+            context.logger.error(
+                "Foundation Models not available",
+                metadata: [
+                    "model": "\(model)",
+                    "endpoint": "generate",
+                ])
+            throw FoundationModelsDependency.Error.notAvailable
+        }
+
         // Extract generation parameters directly
-        let generationParams = try jsonDecoder.decode(
-            FoundationModelsDependency.Parameters.self,
-            from: bodyData
-        )
+        let generationParams: FoundationModelsDependency.Parameters
+        do {
+            generationParams = try jsonDecoder.decode(
+                FoundationModelsDependency.Parameters.self,
+                from: bodyData
+            )
+        } catch {
+            context.logger.error(
+                "Failed to decode generation parameters",
+                metadata: [
+                    "error": "\(error.localizedDescription)",
+                    "model": "\(model)",
+                ])
+            throw error
+        }
 
         // Calculate prompt token count approximation
         let promptTokenCount = approximateTokenCount(for: prompt)
+
+        context.logger.debug(
+            "Generate request",
+            metadata: [
+                "model": "\(model)",
+                "stream": "\(stream)",
+                "prompt_length": "\(prompt.count)",
+            ])
 
         // Check if streaming is requested
         if stream {
@@ -205,15 +213,7 @@ private final actor OllamaServer: Sendable {
                             model: Model.ID(rawValue: model) ?? "default",
                             createdAt: Date(),
                             response: chunk,
-                            done: false,
-                            context: nil,
-                            thinking: nil,
-                            totalDuration: nil,
-                            loadDuration: nil,
-                            promptEvalCount: nil,
-                            promptEvalDuration: nil,
-                            evalCount: nil,
-                            evalDuration: nil
+                            done: false
                         )
 
                         let data = try self.jsonEncoder.encode(response)
@@ -223,6 +223,13 @@ private final actor OllamaServer: Sendable {
 
                     let totalDuration = Date().timeIntervalSince(startTime)
                     let evalTokenCount = self.approximateTokenCount(for: completionText)
+
+                    context.logger.debug(
+                        "Generate streaming completed",
+                        metadata: [
+                            "duration": "\(String(format: "%.2fs", totalDuration))",
+                            "tokens": "\(evalTokenCount)",
+                        ])
 
                     // Send final "done" response
                     let finalResponse = Client.GenerateResponse(
@@ -245,20 +252,19 @@ private final actor OllamaServer: Sendable {
                     try await writer.write(ByteBuffer(string: finalLine))
                     try await writer.finish(nil)
                 } catch {
+                    context.logger.error(
+                        "Generate streaming error",
+                        metadata: [
+                            "error": "\(error.localizedDescription)",
+                            "model": "\(model)",
+                            "stream": "true",
+                        ])
                     // Send error response
                     let errorResponse = Client.GenerateResponse(
                         model: Model.ID(rawValue: model) ?? "default",
                         createdAt: Date(),
                         response: "Error: \(error.localizedDescription)",
-                        done: true,
-                        context: nil,
-                        thinking: nil,
-                        totalDuration: nil,
-                        loadDuration: nil,
-                        promptEvalCount: nil,
-                        promptEvalDuration: nil,
-                        evalCount: nil,
-                        evalDuration: nil
+                        done: true
                     )
 
                     let errorData = try self.jsonEncoder.encode(errorResponse)
@@ -286,6 +292,13 @@ private final actor OllamaServer: Sendable {
 
             let evalTokenCount = approximateTokenCount(for: response)
 
+            context.logger.debug(
+                "Generate completed",
+                metadata: [
+                    "duration": "\(String(format: "%.2fs", totalDuration))",
+                    "tokens": "\(evalTokenCount)",
+                ])
+
             let data = try jsonEncoder.encode(
                 Client.GenerateResponse(
                     model: Model.ID(rawValue: model) ?? "default",
@@ -310,7 +323,9 @@ private final actor OllamaServer: Sendable {
         }
     }
 
-    private func chatCompletion(request: Request) async throws -> Response {
+    private func chatCompletion(request: Request, context: some RequestContext) async throws
+        -> Response
+    {
         let startTime = Date()
 
         var bodyData = Data()
@@ -320,20 +335,45 @@ private final actor OllamaServer: Sendable {
 
         let params = try jsonDecoder.decode([String: Value].self, from: bodyData)
 
-        guard foundationModelsClient.isAvailable() else {
-            throw FoundationModelsDependency.Error.notAvailable
-        }
-
         // Extract parameters
         let model = params["model"]?.stringValue ?? "default"
         let stream = params["stream"]?.boolValue ?? false
-        let messages: [Chat.Message]
-        if let messagesValue = params["messages"] {
-            let data = try jsonEncoder.encode(messagesValue)
-            messages = try jsonDecoder.decode([Chat.Message].self, from: data)
-        } else {
-            messages = []
+
+        guard foundationModelsClient.isAvailable() else {
+            context.logger.error(
+                "Foundation Models not available",
+                metadata: [
+                    "model": "\(model)",
+                    "endpoint": "chat",
+                ])
+            throw FoundationModelsDependency.Error.notAvailable
         }
+
+        let messages: [Chat.Message]
+        do {
+            if let messagesValue = params["messages"] {
+                let data = try jsonEncoder.encode(messagesValue)
+                messages = try jsonDecoder.decode([Chat.Message].self, from: data)
+            } else {
+                messages = []
+            }
+        } catch {
+            context.logger.error(
+                "Failed to decode chat messages",
+                metadata: [
+                    "error": "\(error.localizedDescription)",
+                    "model": "\(model)",
+                ])
+            throw error
+        }
+
+        context.logger.debug(
+            "Chat request",
+            metadata: [
+                "model": "\(model)",
+                "stream": "\(stream)",
+                "messages_count": "\(messages.count)",
+            ])
 
         // Extract generation parameters directly
         let generationParams = try jsonDecoder.decode(
@@ -380,6 +420,13 @@ private final actor OllamaServer: Sendable {
                     let totalDuration = Date().timeIntervalSince(startTime)
                     let evalTokenCount = self.approximateTokenCount(for: completionText)
 
+                    context.logger.debug(
+                        "Chat streaming completed",
+                        metadata: [
+                            "duration": "\(String(format: "%.2fs", totalDuration))",
+                            "tokens": "\(evalTokenCount)",
+                        ])
+
                     // Send final "done" response
                     let finalResponse = Client.ChatResponse(
                         model: Model.ID(rawValue: model) ?? "default",
@@ -399,18 +446,19 @@ private final actor OllamaServer: Sendable {
                     try await writer.write(ByteBuffer(string: finalLine))
                     try await writer.finish(nil)
                 } catch {
+                    context.logger.error(
+                        "Chat streaming error",
+                        metadata: [
+                            "error": "\(error.localizedDescription)",
+                            "model": "\(model)",
+                            "stream": "true",
+                        ])
                     // Send error response
                     let errorResponse = Client.ChatResponse(
                         model: Model.ID(rawValue: model) ?? "default",
                         createdAt: Date(),
                         message: Chat.Message.assistant("Error: \(error.localizedDescription)"),
-                        done: true,
-                        totalDuration: nil,
-                        loadDuration: nil,
-                        promptEvalCount: nil,
-                        promptEvalDuration: nil,
-                        evalCount: nil,
-                        evalDuration: nil
+                        done: true
                     )
 
                     let errorData = try self.jsonEncoder.encode(errorResponse)
@@ -438,6 +486,13 @@ private final actor OllamaServer: Sendable {
 
             let evalTokenCount = approximateTokenCount(for: response)
 
+            context.logger.debug(
+                "Chat completed",
+                metadata: [
+                    "duration": "\(String(format: "%.2fs", totalDuration))",
+                    "tokens": "\(evalTokenCount)",
+                ])
+
             let data = try jsonEncoder.encode(
                 Client.ChatResponse(
                     model: Model.ID(rawValue: model) ?? "default",
@@ -460,9 +515,43 @@ private final actor OllamaServer: Sendable {
         }
     }
 
-    private func showModel(request: Request) async throws -> Client.ShowModelResponse {
-        _ = request.uri.queryParameters["name"] ?? "default"
-        return Client.ShowModelResponse(
+    private func listModels(context: some RequestContext) async throws -> Response {
+        context.logger.debug("Listing available models")
+        let models = await foundationModelsClient.listModels()
+
+        let response = Client.ListModelsResponse(
+            models: models.map {
+                Client.ListModelsResponse.Model(
+                    name: $0,
+                    modifiedAt: iso8601Formatter.string(from: Date()),
+                    size: 0,
+                    digest: "",
+                    details: Model.Details(
+                        format: "apple",
+                        family: "foundation",
+                        families: ["foundation"],
+                        parameterSize: "unknown",
+                        quantizationLevel: "unknown",
+                        parentModel: nil
+                    )
+                )
+            }
+        )
+
+        let data = try jsonEncoder.encode(response)
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json"],
+            body: .init(byteBuffer: ByteBuffer(data: data))
+        )
+    }
+
+    private func showModel(request: Request, context: some RequestContext) async throws -> Response
+    {
+        let modelName = request.uri.queryParameters["name"] ?? "default"
+        context.logger.debug("Show model request", metadata: ["name": "\(modelName)"])
+
+        let response = Client.ShowModelResponse(
             modelfile: "FROM apple/foundation-models",
             parameters: "{}",
             template: "{{ .Prompt }}",
@@ -476,6 +565,13 @@ private final actor OllamaServer: Sendable {
             ),
             info: ["license": .string("Apple Foundation Models")],
             capabilities: [.completion]
+        )
+
+        let data = try jsonEncoder.encode(response)
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json"],
+            body: .init(byteBuffer: ByteBuffer(data: data))
         )
     }
 
