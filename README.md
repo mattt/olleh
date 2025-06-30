@@ -4,8 +4,6 @@
   <img alt="olleh" width="200">
 </picture>
 
----
-
 ![Screen recording of olleh command running interactively](/demo.gif)
 
 Olleh provides an Ollama-compatible API to Apple's new
