@@ -4,6 +4,41 @@ import FoundationModels
 import Ollama
 
 struct FoundationModelsDependency: Sendable {
+    struct ModelInfo: Codable, Sendable {
+        let name: String
+        let digest: String
+        let size: Int64
+        let modifiedAt: Date
+        let details: Model.Details
+        let capabilities: Set<Model.Capability>
+        let license: String
+        let temperature: Double
+        let contextLength: Int
+        let embeddingLength: Int
+
+        // https://machinelearning.apple.com/research/apple-foundation-models-2025-updates
+        static let `default` = ModelInfo(
+            name: "default",
+            digest: "",
+            size: 0,
+            modifiedAt: Date(timeIntervalSince1970: 1_749_487_260),  // June 9, 2025 at 9:41 AM PST
+            details: Model.Details(
+                format: "apple",
+                family: "foundation",
+                families: ["foundation"],
+                parameterSize: "3B",
+                quantizationLevel: "2b-qat",
+                parentModel: nil
+            ),
+            capabilities: [.completion, .tools],
+            license: "Apple Terms of Use",
+            temperature: 0.7,
+            contextLength: 65536,
+            embeddingLength: 2048
+        )
+
+    }
+
     enum Error: Swift.Error, LocalizedError {
         case notAvailable
         case invalidModel
@@ -47,8 +82,9 @@ struct FoundationModelsDependency: Sendable {
 
     var isAvailable: @Sendable () -> Bool
     var prewarm: @Sendable () async -> Void
-    var listModels: @Sendable () async -> [String]
+    var listModels: @Sendable () async -> [ModelInfo]
     var modelExists: @Sendable (_ name: String) async -> Bool
+    var getModelInfo: @Sendable (_ name: String) async -> ModelInfo?
     var generate:
         @Sendable (_ model: String, _ prompt: String, _ parameters: Parameters) async throws
             -> String
@@ -204,10 +240,13 @@ extension FoundationModelsDependency: DependencyKey {
                 await client.prewarm()
             },
             listModels: {
-                return ["default"]
+                return [ModelInfo.default]
             },
             modelExists: { name in
                 return name == "default"
+            },
+            getModelInfo: { name in
+                return name == "default" ? ModelInfo.default : nil
             },
             generate: { model, prompt, parameters in
                 return try await client.generate(
@@ -244,10 +283,13 @@ extension FoundationModelsDependency: DependencyKey {
         isAvailable: { true },
         prewarm: {},
         listModels: {
-            return ["default"]
+            return [ModelInfo.default]
         },
         modelExists: { name in
             return name == "default"
+        },
+        getModelInfo: { name in
+            return name == "default" ? ModelInfo.default : nil
         },
         generate: { _, prompt, _ in
             "Test response for: \(prompt)"

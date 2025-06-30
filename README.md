@@ -63,6 +63,7 @@ SUBCOMMANDS:
   serve                   Start olleh
   run                     Run a model interactively
   list                    List models
+  show                    Show model information
   check                   Check availability
 
   See 'olleh help <subcommand>' for detailed help.
@@ -82,7 +83,7 @@ olleh serve
 olleh serve --verbose
 
 # Bind to specific host and port
-olleh serve --host 0.0.0.0 --port 8080
+olleh serve --host 0.0.0.0 --port 11434 # default ollama port 
 ```
 
 #### `olleh run`
@@ -90,19 +91,55 @@ olleh serve --host 0.0.0.0 --port 8080
 Start an interactive chat session with the model.
 
 ```bash
-olleh run default
+$ olleh run default
+>>> Enter a message (/? for help)
 ```
 
 Use `Ctrl+C` or type `/bye` to exit the chat session.
-
-#### `olleh check`
-
-Verify that Foundation Models are available on your system.
 
 #### `olleh list`
 
 List all available models.
 Currently returns only the `default` Foundation Model.
+
+```console
+$ olleh list
+NAME                     ID             SIZE     MODIFIED
+default                                 N/A      2 weeks ago
+```
+
+#### `olleh show`
+
+Show information about a model.
+
+```console
+$ olleh show default
+  Model
+    architecture        foundation
+    parameters          3B
+    context length      65536
+    embedding length    2048
+    quantization        2b-qat
+
+  Capabilities
+    completion
+    tools
+
+  Parameters
+    temperature    0.7
+
+  License
+    Apple Terms of Use
+```
+
+#### `olleh check`
+
+Verify that Foundation Models are available on your system.
+
+```console
+$ olleh check
+Foundation Models available
+```
 
 ## HTTP API
 
@@ -141,10 +178,11 @@ print(response.response)
 ### Example: Using with curl
 
 ```bash
-# Generate text
+# Generate text with streaming
 curl http://localhost:11941/api/generate -d '{
   "model": "default",
-  "prompt": "Why is the sky blue?"
+  "prompt": "Why is the sky blue?",
+  "stream": true
 }'
 
 # Chat completion
@@ -152,7 +190,7 @@ curl http://localhost:11941/api/chat -d '{
   "model": "default",
   "messages": [
     {"role": "user", "content": "Hello, how are you?"}
-  ]
+  ],
 }'
 ```
 
@@ -165,25 +203,6 @@ Future releases may include:
 - Support for specialized models as they become available
 - Integration with [custom adapters](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)
 - Model configuration and fine-tuning options
-
-## Troubleshooting
-
-### Common Issues
-
-**Foundation Models not available**
-- Ensure you're running macOS 26 beta or later
-- Verify you have an Apple Silicon Mac
-- Check that Foundation Models framework is properly installed
-
-**Server fails to start**
-- Check if another process is using the port
-- Try a different port with `--port` flag
-- Ensure you have necessary permissions
-
-**Model responses are slow**
-- Foundation Models require significant computational resources
-- Ensure other resource-intensive applications are closed
-- Consider adjusting generation parameters for faster responses
 
 ## License
 

@@ -6,7 +6,7 @@ struct Olleh: ParsableCommand {
         commandName: "olleh",
         abstract: "Ollama-compatible CLI for Apple Foundation Models",
         version: "1.0.0",
-        subcommands: [Serve.self, Run.self, List.self, Check.self]
+        subcommands: [Serve.self, Run.self, List.self, Show.self, Check.self]
     )
 }
 

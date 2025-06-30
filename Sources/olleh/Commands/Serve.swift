@@ -519,24 +519,17 @@ private final actor OllamaServer: Sendable {
         context.logger.debug("Listing available models")
         let models = await foundationModelsClient.listModels()
 
-        let response = Client.ListModelsResponse(
-            models: models.map {
-                Client.ListModelsResponse.Model(
-                    name: $0,
-                    modifiedAt: iso8601Formatter.string(from: Date()),
-                    size: 0,
-                    digest: "",
-                    details: Model.Details(
-                        format: "apple",
-                        family: "foundation",
-                        families: ["foundation"],
-                        parameterSize: "unknown",
-                        quantizationLevel: "unknown",
-                        parentModel: nil
-                    )
-                )
-            }
-        )
+        let listModels = models.map { modelInfo in
+            Client.ListModelsResponse.Model(
+                name: modelInfo.name,
+                modifiedAt: iso8601Formatter.string(from: modelInfo.modifiedAt),
+                size: modelInfo.size,
+                digest: modelInfo.digest,
+                details: modelInfo.details
+            )
+        }
+
+        let response = Client.ListModelsResponse(models: listModels)
 
         let data = try jsonEncoder.encode(response)
         return Response(
@@ -548,23 +541,32 @@ private final actor OllamaServer: Sendable {
 
     private func showModel(request: Request, context: some RequestContext) async throws -> Response
     {
-        let modelName = request.uri.queryParameters["name"] ?? "default"
+        guard let modelName = request.uri.queryParameters["name"]?.description else {
+            throw HTTPError(.badRequest, message: "Missing required parameter 'name'")
+        }
         context.logger.debug("Show model request", metadata: ["name": "\(modelName)"])
+
+        guard let modelInfo = await foundationModelsClient.getModelInfo(modelName) else {
+            throw HTTPError(.notFound, message: "Model '\(modelName)' not found")
+        }
+
+        var info: [String: Value] = [
+            "license": .string(modelInfo.license),
+            "architecture": .string(modelInfo.details.family),
+            "parameters": .string(modelInfo.details.parameterSize),
+            "context_length": .double(Double(modelInfo.contextLength)),
+            "embedding_length": .double(Double(modelInfo.embeddingLength)),
+        ]
+
+        info["temperature"] = .double(modelInfo.temperature)
 
         let response = Client.ShowModelResponse(
             modelfile: "FROM apple/foundation-models",
-            parameters: "{}",
+            parameters: info["temperature"]?.description ?? "0.7",
             template: "{{ .Prompt }}",
-            details: Model.Details(
-                format: "apple",
-                family: "foundation",
-                families: ["foundation"],
-                parameterSize: "unknown",
-                quantizationLevel: "unknown",
-                parentModel: nil
-            ),
-            info: ["license": .string("Apple Foundation Models")],
-            capabilities: [.completion]
+            details: modelInfo.details,
+            info: info,
+            capabilities: modelInfo.capabilities
         )
 
         let data = try jsonEncoder.encode(response)
@@ -574,5 +576,4 @@ private final actor OllamaServer: Sendable {
             body: .init(byteBuffer: ByteBuffer(data: data))
         )
     }
-
 }
