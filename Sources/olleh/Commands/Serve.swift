@@ -106,23 +106,11 @@ private final actor OllamaServer: Sendable {
         }
 
         router.get("/api/tags") { request, context in
-            let response = try await self.listModels()
-            let data = try self.jsonEncoder.encode(response)
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: data))
-            )
+            return try await self.listModels()
         }
 
         router.get("/api/show") { request, context in
-            let response = try await self.showModel(request: request)
-            let data = try self.jsonEncoder.encode(response)
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: data))
-            )
+            return try await self.showModel(request: request)
         }
 
         let app = Application(
@@ -135,10 +123,10 @@ private final actor OllamaServer: Sendable {
         try await app.runService()
     }
 
-    private func listModels() async throws -> Client.ListModelsResponse {
+    private func listModels() async throws -> Response {
         let models = await foundationModelsClient.listModels()
 
-        return Client.ListModelsResponse(
+        let response = Client.ListModelsResponse(
             models: models.map {
                 Client.ListModelsResponse.Model(
                     name: $0,
@@ -155,6 +143,13 @@ private final actor OllamaServer: Sendable {
                     )
                 )
             }
+        )
+
+        let data = try jsonEncoder.encode(response)
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json"],
+            body: .init(byteBuffer: ByteBuffer(data: data))
         )
     }
 
@@ -460,9 +455,9 @@ private final actor OllamaServer: Sendable {
         }
     }
 
-    private func showModel(request: Request) async throws -> Client.ShowModelResponse {
+    private func showModel(request: Request) async throws -> Response {
         _ = request.uri.queryParameters["name"] ?? "default"
-        return Client.ShowModelResponse(
+        let response = Client.ShowModelResponse(
             modelfile: "FROM apple/foundation-models",
             parameters: "{}",
             template: "{{ .Prompt }}",
@@ -476,6 +471,13 @@ private final actor OllamaServer: Sendable {
             ),
             info: ["license": .string("Apple Foundation Models")],
             capabilities: [.completion]
+        )
+
+        let data = try jsonEncoder.encode(response)
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json"],
+            body: .init(byteBuffer: ByteBuffer(data: data))
         )
     }
 
