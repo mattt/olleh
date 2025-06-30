@@ -8,19 +8,19 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    runs-on: macos-15
 
     strategy:
       matrix:
-        swift-version:
-          - ^6
+        xcode: ["26.0"]
 
-    name: Build (Swift ${{ matrix.swift-version }})
+    name: Build (Xcode ${{ matrix.swift-version }})
 
     steps:
       - uses: actions/checkout@v4
-      - uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: ${{ matrix.swift-version }}
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      - name: Skip macro validation
+        run: defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
       - name: Build
-        run: swift build -v
+        run: xcodebuild -scheme olleh -sdk macosx -destination "generic/platform=macOS,name=Any Mac"
