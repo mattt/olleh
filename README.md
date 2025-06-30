@@ -12,24 +12,19 @@ for seamless integration with existing tools and workflows.
 ## Requirements
 
 - macOS 26 beta or later
-- Xcode 26 beta / Swift 6.2+
 - Apple Silicon Mac (M1 or later)
 
 ## Installation
 
 ### Building from Source
 
+Requires Xcode 26 beta / Swift 6.2 or later:
+
 ```bash
 git clone https://github.com/loopwork/olleh.git
 cd olleh
-swift build -c release
-```
-
-To install the built executable to your `PATH`:
-
-```bash
-swift build -c release
-cp .build/release/olleh /usr/local/bin/
+make
+sudo make install # installs to /usr/local/bin/
 ```
 
 ## Quick Start
