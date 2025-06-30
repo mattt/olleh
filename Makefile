@@ -17,7 +17,7 @@ default: all
 all: olleh
 
 olleh: Sources/**/*.swift Package.swift
-	$(SWIFT) build -c release
+	$(SWIFT) build -c release --disable-sandbox
 	cp .build/release/olleh $@
 
 demo.gif: olleh demo.tape

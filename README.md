@@ -13,12 +13,17 @@ for seamless integration with existing tools and workflows.
 
 - macOS 26 beta or later
 - Apple Silicon Mac (M1 or later)
+- Xcode 26 beta / Swift 6.2+
 
 ## Installation
 
-### Building from Source
+### Homebrew
 
-Requires Xcode 26 beta / Swift 6.2 or later:
+```bash
+brew install loopwork/tap/olleh
+```
+
+### Building from Source
 
 ```bash
 git clone https://github.com/loopwork/olleh.git
