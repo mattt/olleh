@@ -1,7 +1,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Assets/logo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="Assets/logo-light.svg">
-  <img alt="olleh" width="250">
+  <img alt="olleh" width="200">
 </picture>
 
 ---
