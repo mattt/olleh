@@ -75,7 +75,7 @@ SUBCOMMANDS:
 Start the [Ollama-compatible HTTP API](https://github.com/ollama/ollama/blob/main/docs/api.md) server.
 
 ```bash
-# Default configuration (port 43110)
+# Default configuration (port 11941)
 olleh serve
 
 # Custom port
@@ -126,8 +126,8 @@ client library:
 ```swift
 import Ollama
 
-// Connect to olleh server (default port: 43110)
-let client = Client(host: URL("http://localhost:43110")!)
+// Connect to olleh server (default port: 11941)
+let client = Client(host: URL("http://localhost:11941")!)
 
 // Generate text using Apple's Foundation Models
 let response = try await client.generate(
@@ -145,13 +145,13 @@ print(response.response)
 
 ```bash
 # Generate text
-curl http://localhost:43110/api/generate -d '{
+curl http://localhost:11941/api/generate -d '{
   "model": "default",
   "prompt": "Why is the sky blue?"
 }'
 
 # Chat completion
-curl http://localhost:43110/api/chat -d '{
+curl http://localhost:11941/api/chat -d '{
   "model": "default",
   "messages": [
     {"role": "user", "content": "Hello, how are you?"}

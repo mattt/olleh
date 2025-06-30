@@ -16,7 +16,7 @@ extension Olleh {
         var host: String = "127.0.0.1"
 
         @Option(help: "Port to listen on")
-        var port: Int = 43110
+        var port: Int = 11941
 
         func run() throws {
             let server = OllamaServer(host: host, port: port)
