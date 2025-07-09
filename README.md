@@ -205,14 +205,15 @@ provided by Apple's Foundation Models framework.
 
 ### Foundation Models Adapters
 
-Olleh supports loading custom Foundation Models adapters using the `--load` flag:
+Olleh supports loading custom Foundation Models adapters using the `--adapter` flag:
 
 ```bash
 # Load and run with a custom adapter
-olleh run default --load /path/to/my_adapter.fmadapter
+olleh run default --adapter /path/to/my_adapter.fmadapter
 ```
 
 Foundation Models adapters let you:
+
 - Specialize the model for specific domains or tasks
 - Improve accuracy and consistency for your use case
 - Add new skills to the base model

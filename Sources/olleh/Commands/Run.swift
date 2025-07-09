@@ -71,7 +71,7 @@ extension Olleh {
         var stop: String?
 
         @Option(name: .long, help: "Path to .fmadapter file to load")
-        var load: String?
+        var adapter: String?
 
         func validate() throws {
             if let temp = temperature {
@@ -92,11 +92,11 @@ extension Olleh {
                 }
             }
 
-            if let adapterPath = load {
-                guard FileManager.default.fileExists(atPath: adapterPath) else {
-                    throw ValidationError("Adapter file not found: \(adapterPath)")
+            if let adapter = adapter {
+                guard FileManager.default.fileExists(atPath: adapter) else {
+                    throw ValidationError("Adapter file not found: \(adapter)")
                 }
-                guard adapterPath.hasSuffix(".fmadapter") else {
+                guard adapter.hasSuffix(".fmadapter") else {
                     throw ValidationError("Adapter file must have .fmadapter extension")
                 }
             }
@@ -123,7 +123,7 @@ extension Olleh {
                             maxTokens: maxTokens,
                             stop: stop
                         ),
-                        adapterPath: load
+                        adapterPath: adapter
                     )
                     try await chat.start(with: model)
                 } catch {
