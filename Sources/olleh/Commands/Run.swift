@@ -273,7 +273,7 @@ private final actor ChatSession {
         if foundationModelsClient.isAvailable() {
             // Load adapter if specified
             if let adapterPath = adapterPath {
-                try foundationModelsClient.loadAdapter(adapterPath)
+                try await foundationModelsClient.loadAdapter(adapterPath)
                 if settings.verbose {
                     print("Loaded adapter from: \(adapterPath)")
                 }

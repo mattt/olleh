@@ -81,7 +81,7 @@ struct FoundationModelsDependency: Sendable {
     }
 
     var isAvailable: @Sendable () -> Bool
-    var loadAdapter: @Sendable (_ path: String) throws -> Void
+    var loadAdapter: @Sendable (_ path: String) async throws -> Void
     var prewarm: @Sendable () async -> Void
     var listModels: @Sendable () async -> [ModelInfo]
     var modelExists: @Sendable (_ name: String) async -> Bool
@@ -113,7 +113,7 @@ extension FoundationModelsDependency: DependencyKey {
 
             private let isAvailable: Bool = ProcessInfo.processInfo.processorArchitecture == "arm64"
 
-            func loadAdapter(from path: String) throws {
+            func loadAdapter(from path: String) async throws {
                 let url = URL(filePath: path)
                 self.adapter = try SystemLanguageModel.Adapter(fileURL: url)
                 // Reset session to use new adapter
@@ -129,7 +129,7 @@ extension FoundationModelsDependency: DependencyKey {
                 if let adapter = self.adapter {
                     model = SystemLanguageModel(adapter: adapter)
                 } else {
-                    model = SystemLanguageModel()
+                    model = .default
                 }
 
                 let session = LanguageModelSession(model: model)
