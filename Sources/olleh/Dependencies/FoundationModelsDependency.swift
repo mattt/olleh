@@ -81,6 +81,7 @@ struct FoundationModelsDependency: Sendable {
     }
 
     var isAvailable: @Sendable () -> Bool
+    var loadAdapter: @Sendable (_ path: String) throws -> Void
     var prewarm: @Sendable () async -> Void
     var listModels: @Sendable () async -> [ModelInfo]
     var modelExists: @Sendable (_ name: String) async -> Bool
@@ -108,15 +109,30 @@ extension FoundationModelsDependency: DependencyKey {
         @available(macOS 26.0, *)
         actor Client {
             private var session: LanguageModelSession?
+            private var adapter: SystemLanguageModel.Adapter?
 
             private let isAvailable: Bool = ProcessInfo.processInfo.processorArchitecture == "arm64"
+
+            func loadAdapter(from path: String) throws {
+                let url = URL(filePath: path)
+                self.adapter = try SystemLanguageModel.Adapter(fileURL: url)
+                // Reset session to use new adapter
+                self.session = nil
+            }
 
             private func getSession() async throws -> LanguageModelSession {
                 if let session = self.session {
                     return session
                 }
 
-                let session = LanguageModelSession()
+                let model: SystemLanguageModel
+                if let adapter = self.adapter {
+                    model = SystemLanguageModel(adapter: adapter)
+                } else {
+                    model = SystemLanguageModel()
+                }
+
+                let session = LanguageModelSession(model: model)
                 self.session = session
                 return session
             }
@@ -236,6 +252,9 @@ extension FoundationModelsDependency: DependencyKey {
                     return false
                 }
             },
+            loadAdapter: { path in
+                try await client.loadAdapter(from: path)
+            },
             prewarm: {
                 await client.prewarm()
             },
@@ -281,6 +300,7 @@ extension FoundationModelsDependency: DependencyKey {
 
     static let testValue = FoundationModelsDependency(
         isAvailable: { true },
+        loadAdapter: { _ in },
         prewarm: {},
         listModels: {
             return [ModelInfo.default]
