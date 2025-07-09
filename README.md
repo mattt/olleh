@@ -203,10 +203,30 @@ curl http://localhost:11941/api/chat -d '{
 Olleh currently supports the lone `default` model
 provided by Apple's Foundation Models framework.
 
+### Foundation Models Adapters
+
+Olleh supports loading custom Foundation Models adapters using the `--adapter` flag:
+
+```bash
+# Load and run with a custom adapter
+olleh run default --adapter /path/to/my_adapter.fmadapter
+```
+
+Foundation Models adapters let you:
+
+- Specialize the model for specific domains or tasks
+- Improve accuracy and consistency for your use case
+- Add new skills to the base model
+
+See [Apple's Foundation Models Adapter documentation](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)
+for information on training custom adapters.
+
+### Future Features
+
 Future releases may include:
 - Support for specialized models as they become available
-- Integration with [custom adapters](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)
 - Model configuration and fine-tuning options
+- Adapter management commands
 
 ## License
 

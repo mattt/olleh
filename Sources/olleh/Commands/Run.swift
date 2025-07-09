@@ -70,6 +70,9 @@ extension Olleh {
         @Option(name: .long, help: "Stop sequences (comma-separated)")
         var stop: String?
 
+        @Option(name: .long, help: "Path to .fmadapter file to load")
+        var adapter: String?
+
         func validate() throws {
             if let temp = temperature {
                 guard temp >= 0.0 && temp <= 2.0 else {
@@ -86,6 +89,15 @@ extension Olleh {
             if let maxTokens = maxTokens {
                 guard maxTokens > 0 else {
                     throw ValidationError("Max tokens must be positive")
+                }
+            }
+
+            if let adapter = adapter {
+                guard FileManager.default.fileExists(atPath: adapter) else {
+                    throw ValidationError("Adapter file not found: \(adapter)")
+                }
+                guard adapter.hasSuffix(".fmadapter") else {
+                    throw ValidationError("Adapter file must have .fmadapter extension")
                 }
             }
         }
@@ -110,7 +122,8 @@ extension Olleh {
                             topP: topP,
                             maxTokens: maxTokens,
                             stop: stop
-                        )
+                        ),
+                        adapterPath: adapter
                     )
                     try await chat.start(with: model)
                 } catch {
@@ -244,17 +257,28 @@ private final actor ChatSession {
     var settings: Settings
 
     var parameters: FoundationModelsDependency.Parameters
+    let adapterPath: String?
 
     init(
         settings: Settings = .init(),
-        parameters: FoundationModelsDependency.Parameters = .init()
+        parameters: FoundationModelsDependency.Parameters = .init(),
+        adapterPath: String? = nil
     ) {
         self.settings = settings
         self.parameters = parameters
+        self.adapterPath = adapterPath
     }
 
     func start(with model: String) async throws {
         if foundationModelsClient.isAvailable() {
+            // Load adapter if specified
+            if let adapterPath = adapterPath {
+                try await foundationModelsClient.loadAdapter(adapterPath)
+                if settings.verbose {
+                    print("Loaded adapter from: \(adapterPath)")
+                }
+            }
+
             _ = await withLoadingAnimation {
                 await self.foundationModelsClient.prewarm()
             }
