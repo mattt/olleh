@@ -24,13 +24,13 @@ for seamless integration with existing tools and workflows.
 ### Homebrew
 
 ```bash
-brew install loopwork/tap/olleh
+brew install mattt/tap/olleh
 ```
 
 ### Building from Source
 
 ```bash
-git clone https://github.com/loopwork/olleh.git
+git clone https://github.com/mattt/olleh.git
 cd olleh
 make
 sudo make install # installs to /usr/local/bin/
@@ -158,7 +158,7 @@ the following Ollama-compatible endpoints are available:
 ### Example: Using with Ollama Swift Client
 
 You can use Olleh with the
-[Ollama Swift](https://github.com/loopwork/ollama-swift)
+[Ollama Swift](https://github.com/mattt/ollama-swift)
 client library:
 
 ```swift
