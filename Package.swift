@@ -12,8 +12,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird", from: "2.0.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.2"),
-        .package(url: "https://github.com/loopwork/ollama-swift", from: "1.8.0"),
-        .package(url: "https://github.com/loopwork/bestline-swift", from: "1.0.0"),
+        .package(url: "https://github.com/mattt/ollama-swift", from: "1.8.0"),
+        .package(url: "https://github.com/mattt/bestline-swift", from: "1.0.0"),
     ],
     targets: [
         .executableTarget(
