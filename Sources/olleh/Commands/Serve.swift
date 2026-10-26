@@ -126,6 +126,11 @@ private final actor OllamaServer: Sendable {
             return try await self.showModel(request: request, context: context)
         }
 
+        router.get("/api/version") { request, context in
+            context.logger.info("GET /api/version")
+            return try await self.version()
+        }
+
         var logger = Logger(label: "olleh")
         logger.logLevel = verbose ? .debug : .info
 
@@ -532,6 +537,15 @@ private final actor OllamaServer: Sendable {
         let response = Client.ListModelsResponse(models: listModels)
 
         let data = try jsonEncoder.encode(response)
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json"],
+            body: .init(byteBuffer: ByteBuffer(data: data))
+        )
+    }
+
+    private func version() throws -> Response {
+        let data = try jsonEncoder.encode(["version": Olleh.version])
         return Response(
             status: .ok,
             headers: [.contentType: "application/json"],
