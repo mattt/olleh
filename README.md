@@ -154,6 +154,7 @@ the following Ollama-compatible endpoints are available:
 - `POST /api/chat` - Chat with the model
 - `GET /api/tags` - List available models
 - `GET /api/show` - Show information about a model
+- `GET /api/version` - Get the olleh version
 
 ### Example: Using with Ollama Swift Client
 
