@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 
 struct Olleh: ParsableCommand {
-    static let version = "1.1.1"
+    static let version = "1.2.0"
 
     static let configuration = CommandConfiguration(
         commandName: "olleh",
