@@ -11,10 +11,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - runner: macos-15
-            xcode: "26.0"
+          - runner: macos-26
+            xcode: "26.3"
           - runner: xcode-27
             xcode: "27.0"
 
