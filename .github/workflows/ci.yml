@@ -8,11 +8,15 @@ on:
 
 jobs:
   test:
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
 
     strategy:
       matrix:
-        xcode: ["26.0"]
+        include:
+          - runner: macos-15
+            xcode: "26.0"
+          - runner: xcode-27
+            xcode: "27.0"
 
     name: Build (Xcode ${{ matrix.xcode }})
 
