@@ -80,228 +80,154 @@ struct FoundationModelsDependency: Sendable {
         }
     }
 
+    struct Session: Sendable {
+        var prewarm: @Sendable () -> Void
+        var generate: @Sendable (String, Parameters) async throws -> String
+        var streamGenerate:
+            @Sendable (String, Parameters) async throws -> AsyncThrowingStream<String, Swift.Error>
+
+        static func live(model: SystemLanguageModel) -> Self {
+            let session = LanguageModelSession(model: model)
+            return Self(
+                prewarm: { session.prewarm() },
+                generate: { prompt, parameters in
+                    let response = try await session.respond(
+                        to: prompt, options: parameters.generationOptions)
+                    return response.content
+                },
+                streamGenerate: { prompt, parameters in
+                    AsyncThrowingStream { continuation in
+                        Task {
+                            do {
+                                var lastContentLength = 0
+                                for try await snapshot in session.streamResponse(
+                                    to: prompt, options: parameters.generationOptions)
+                                {
+                                    // Foundation Models emits cumulative snapshots, not deltas
+                                    // Extract only the new content since the last emission
+                                    let currentContent = snapshot.content
+                                    if currentContent.count > lastContentLength {
+                                        let newContent = String(currentContent.dropFirst(lastContentLength))
+                                        continuation.yield(newContent)
+                                        lastContentLength = currentContent.count
+                                    }
+                                }
+                                continuation.finish()
+                            } catch {
+                                continuation.finish(throwing: error)
+                            }
+                        }
+                    }
+                }
+            )
+        }
+    }
+
     var isAvailable: @Sendable () -> Bool
     var loadAdapter: @Sendable (_ path: String) async throws -> Void
-    var prewarm: @Sendable () async -> Void
+    var makeSession: @Sendable () async throws -> Session
     var listModels: @Sendable () async -> [ModelInfo]
     var modelExists: @Sendable (_ name: String) async -> Bool
     var getModelInfo: @Sendable (_ name: String) async -> ModelInfo?
-    var generate:
-        @Sendable (_ model: String, _ prompt: String, _ parameters: Parameters) async throws
-            -> String
-    var streamGenerate:
-        @Sendable (_ model: String, _ prompt: String, _ parameters: Parameters) async throws ->
-            AsyncThrowingStream<
-                String, Swift.Error
-            >
-    var chat:
-        @Sendable (_ model: String, _ messages: [Chat.Message], _ parameters: Parameters)
-            async throws -> String
-    var streamChat:
-        @Sendable (_ model: String, _ messages: [Chat.Message], _ parameters: Parameters)
-            async throws -> AsyncThrowingStream<String, Swift.Error>
+
+    func generate(_ model: String, _ prompt: String, _ parameters: Parameters) async throws -> String {
+        try await makeSession().generate(prompt, parameters)
+    }
+
+    func streamGenerate(_ model: String, _ prompt: String, _ parameters: Parameters) async throws
+        -> AsyncThrowingStream<String, Swift.Error>
+    {
+        try await makeSession().streamGenerate(prompt, parameters)
+    }
+
+    func chat(_ model: String, _ messages: [Chat.Message], _ parameters: Parameters) async throws -> String {
+        try await generate(model, prompt(for: messages), parameters)
+    }
+
+    func streamChat(_ model: String, _ messages: [Chat.Message], _ parameters: Parameters) async throws
+        -> AsyncThrowingStream<String, Swift.Error>
+    {
+        try await streamGenerate(model, prompt(for: messages), parameters)
+    }
+
+    private func prompt(for messages: [Chat.Message]) -> String {
+        var result = ""
+        result.reserveCapacity(messages.count * 128)
+
+        for (index, message) in messages.enumerated() {
+            if index > 0 {
+                result += "\n\n"
+            }
+
+            switch message.role {
+            case .system:
+                result += "System: \(message.content)"
+            case .user:
+                result += "User: \(message.content)"
+            case .assistant:
+                result += "Assistant: \(message.content)"
+            case .tool:
+                result += "Tool: \(message.content)"
+            }
+        }
+
+        return result
+    }
 }
 
 // MARK: -
 
 extension FoundationModelsDependency: DependencyKey {
-    static let liveValue = {
-        @available(macOS 26.0, *)
-        actor Client {
-            private var session: LanguageModelSession?
-            private var adapter: SystemLanguageModel.Adapter?
+    static let liveValue = live()
 
-            private let isAvailable: Bool = ProcessInfo.processInfo.processorArchitecture == "arm64"
+    static func live(
+        makeSession: @escaping @Sendable (SystemLanguageModel) -> Session = Session.live
+    ) -> Self {
+        actor ModelStore {
+            lazy var model = SystemLanguageModel.default
 
-            func loadAdapter(from path: String) async throws {
-                let url = URL(filePath: path)
-                self.adapter = try SystemLanguageModel.Adapter(fileURL: url)
-                // Reset session to use new adapter
-                self.session = nil
-            }
-
-            private func getSession() async throws -> LanguageModelSession {
-                if let session = self.session {
-                    return session
-                }
-
-                let model: SystemLanguageModel
-                if let adapter = self.adapter {
-                    model = SystemLanguageModel(adapter: adapter)
-                } else {
-                    model = .default
-                }
-
-                let session = LanguageModelSession(model: model)
-                self.session = session
-                return session
-            }
-
-            private func checkAvailability() throws {
-                guard isAvailable else {
-                    throw FoundationModelsDependency.Error.notAvailable
-                }
-            }
-
-            func prewarm() async {
-                do {
-                    let session = try await getSession()
-                    session.prewarm()
-                } catch {
-                    // Ignore prewarming errors as the session will still work
-                }
-            }
-
-            func generate(model: String, prompt: String, parameters: Parameters = Parameters())
-                async throws
-                -> String
-            {
-                try checkAvailability()
-                let session = try await getSession()
-
-                let response = try await session.respond(
-                    to: prompt, options: parameters.generationOptions)
-                return response.content
-            }
-
-            func streamGenerate(
-                model: String, prompt: String, parameters: Parameters = Parameters()
-            ) async throws -> AsyncThrowingStream<
-                String, Swift.Error
-            > {
-                try checkAvailability()
-                let session = try await getSession()
-
-                return AsyncThrowingStream { continuation in
-                    Task {
-                        do {
-                            var lastContentLength = 0
-                            for try await snapshot in session.streamResponse(
-                                to: prompt, options: parameters.generationOptions)
-                            {
-                                // Foundation Models emits cumulative snapshots, not deltas
-                                // Extract only the new content since the last emission
-                                let currentContent = snapshot.content
-                                if currentContent.count > lastContentLength {
-                                    let newContent = String(currentContent.dropFirst(lastContentLength))
-                                    continuation.yield(newContent)
-                                    lastContentLength = currentContent.count
-                                }
-                            }
-                            continuation.finish()
-                        } catch {
-                            continuation.finish(throwing: error)
-                        }
-                    }
-                }
-            }
-
-            func chat(
-                model: String, messages: [Chat.Message], parameters: Parameters = Parameters()
-            ) async throws -> String {
-                try checkAvailability()
-                let session = try await getSession()
-                let prompt = prompt(for: messages)
-                let response = try await session.respond(
-                    to: prompt, options: parameters.generationOptions)
-                return response.content
-            }
-
-            func streamChat(
-                model: String, messages: [Chat.Message], parameters: Parameters = Parameters()
-            ) async throws -> AsyncThrowingStream<String, Swift.Error> {
-                try checkAvailability()
-                let prompt = prompt(for: messages)
-                return try await streamGenerate(
-                    model: model, prompt: prompt, parameters: parameters)
-            }
-
-            private func prompt(for messages: [Chat.Message]) -> String {
-                var result = ""
-                result.reserveCapacity(messages.count * 128)
-
-                for (index, message) in messages.enumerated() {
-                    if index > 0 {
-                        result += "\n\n"
-                    }
-
-                    switch message.role {
-                    case .system:
-                        result += "System: \(message.content)"
-                    case .user:
-                        result += "User: \(message.content)"
-                    case .assistant:
-                        result += "Assistant: \(message.content)"
-                    case .tool:
-                        result += "Tool: \(message.content)"
-                    }
-                }
-
-                return result
+            func loadAdapter(from path: String) throws {
+                let adapter = try SystemLanguageModel.Adapter(fileURL: URL(filePath: path))
+                model = SystemLanguageModel(adapter: adapter)
             }
         }
 
-        let client = Client()
+        let store = ModelStore()
+        let isAvailable: @Sendable () -> Bool = {
+            ProcessInfo.processInfo.processorArchitecture == "arm64"
+        }
 
-        return FoundationModelsDependency(
-            isAvailable: {
-                // Foundation Models requires both macOS 26.0+ AND Apple Silicon
-                if #available(macOS 26.0, *) {
-                    return ProcessInfo.processInfo.processorArchitecture == "arm64"
-                } else {
-                    return false
-                }
+        return Self(
+            isAvailable: isAvailable,
+            loadAdapter: { try await store.loadAdapter(from: $0) },
+            makeSession: {
+                guard isAvailable() else { throw Error.notAvailable }
+                return await makeSession(store.model)
             },
-            loadAdapter: { path in
-                try await client.loadAdapter(from: path)
-            },
-            prewarm: {
-                await client.prewarm()
-            },
-            listModels: {
-                return [ModelInfo.default]
-            },
-            modelExists: { name in
-                return name == "default"
-            },
-            getModelInfo: { name in
-                return name == "default" ? ModelInfo.default : nil
-            },
-            generate: { model, prompt, parameters in
-                return try await client.generate(
-                    model: model,
-                    prompt: prompt,
-                    parameters: parameters
-                )
-            },
-            streamGenerate: { model, prompt, parameters in
-                try await client.streamGenerate(
-                    model: model,
-                    prompt: prompt,
-                    parameters: parameters
-                )
-            },
-            chat: { model, messages, parameters in
-                try await client.chat(
-                    model: model,
-                    messages: messages,
-                    parameters: parameters
-                )
-            },
-            streamChat: { model, messages, parameters in
-                try await client.streamChat(
-                    model: model,
-                    messages: messages,
-                    parameters: parameters
-                )
-            }
+            listModels: { [ModelInfo.default] },
+            modelExists: { $0 == "default" },
+            getModelInfo: { $0 == "default" ? ModelInfo.default : nil }
         )
-    }()
+    }
 
     static let testValue = FoundationModelsDependency(
         isAvailable: { true },
         loadAdapter: { _ in },
-        prewarm: {},
+        makeSession: {
+            Session(
+                prewarm: {},
+                generate: { prompt, _ in "Test response for: \(prompt)" },
+                streamGenerate: { prompt, _ in
+                    AsyncThrowingStream { continuation in
+                        continuation.yield("Test")
+                        continuation.yield(" streaming")
+                        continuation.yield(" response")
+                        continuation.yield(" for: \(prompt)")
+                        continuation.finish()
+                    }
+                }
+            )
+        },
         listModels: {
             return [ModelInfo.default]
         },
@@ -310,28 +236,6 @@ extension FoundationModelsDependency: DependencyKey {
         },
         getModelInfo: { name in
             return name == "default" ? ModelInfo.default : nil
-        },
-        generate: { _, prompt, _ in
-            "Test response for: \(prompt)"
-        },
-        streamGenerate: { _, prompt, _ in
-            AsyncThrowingStream { continuation in
-                continuation.yield("Test")
-                continuation.yield(" streaming")
-                continuation.yield(" response")
-                continuation.yield(" for: \(prompt)")
-                continuation.finish()
-            }
-        },
-        chat: { _, messages, _ in
-            "Test chat response for \(messages.count) messages"
-        },
-        streamChat: { _, messages, _ in
-            AsyncThrowingStream { continuation in
-                continuation.yield("Test streaming chat response")
-                continuation.yield(" for \(messages.count) messages")
-                continuation.finish()
-            }
         }
     )
 }
