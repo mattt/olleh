@@ -139,7 +139,7 @@ extension Olleh {
 
 // MARK: -
 
-private final actor ChatSession {
+final actor ChatSession {
     enum Command: String, CaseIterable {
         case help = "help"
         case questionMark = "?"
@@ -254,6 +254,8 @@ private final actor ChatSession {
 
     private let historyFile = "\(NSHomeDirectory())/.olleh_history"
 
+    private var session: FoundationModelsDependency.Session?
+
     var settings: Settings
 
     var parameters: FoundationModelsDependency.Parameters
@@ -279,8 +281,9 @@ private final actor ChatSession {
                 }
             }
 
-            _ = await withLoadingAnimation {
-                await self.foundationModelsClient.prewarm()
+            let session = try await conversationSession()
+            await withLoadingAnimation {
+                session.prewarm()
             }
         }
 
@@ -357,9 +360,9 @@ private final actor ChatSession {
                         settings.system.isEmpty
                         ? input : "\(settings.system)\n\nUser: \(input)"
 
+                    let session = try await conversationSession()
                     do {
-                        let streamedContent = try await foundationModelsClient.streamGenerate(
-                            model, finalPrompt, parameters)
+                        let streamedContent = try await session.streamGenerate(finalPrompt, parameters)
 
                         print("", terminator: "")  // Start on new line
                         var totalResponse = ""
@@ -386,9 +389,7 @@ private final actor ChatSession {
                     } catch {
                         // Fallback to non-streaming if streaming fails
                         let response = try await withLoadingAnimation {
-                            try await self.foundationModelsClient.generate(
-                                model, finalPrompt,
-                                self.parameters)
+                            try await session.generate(finalPrompt, self.parameters)
                         }
 
                         print(response)
@@ -406,6 +407,13 @@ private final actor ChatSession {
                 print()
             }
         }
+    }
+
+    func conversationSession() async throws -> FoundationModelsDependency.Session {
+        if let session { return session }
+        let session = try await foundationModelsClient.makeSession()
+        self.session = session
+        return session
     }
 
     private func handleCommand(_ command: String, model: String) async {
@@ -565,7 +573,8 @@ private final actor ChatSession {
         }
     }
 
-    private func handleClearCommand() {
+    func handleClearCommand() {
+        session = nil
         Bestline.freeHistory()
         parameters = .init()
         settings.system = ""

@@ -25,6 +25,14 @@ let package = Package(
                 .product(name: "Ollama", package: "ollama-swift"),
                 .product(name: "Bestline", package: "bestline-swift"),
             ]
+        ),
+        .testTarget(
+            name: "ollehTests",
+            dependencies: [
+                "olleh",
+                .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "Ollama", package: "ollama-swift"),
+            ]
         )
     ]
 )
